@@ -9,7 +9,8 @@
     "lint": "eslint",
     "test": "vitest run",
     "check-model": "tsx scripts/check-model.ts",
-    "fetch-model": "tsx scripts/fetch-model.ts"
+    "fetch-model": "tsx scripts/fetch-model.ts",
+    "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.1",
