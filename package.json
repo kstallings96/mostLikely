@@ -10,7 +10,8 @@
     "test": "vitest run",
     "check-model": "tsx scripts/check-model.ts",
     "fetch-model": "tsx scripts/fetch-model.ts",
-    "typecheck": "next typegen && tsc --noEmit"
+    "typecheck": "next typegen && tsc --noEmit",
+    "classroom": "next build && next start --port 3000"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.1",

@@ -112,37 +112,7 @@ export async function probsAfterIds({ model }: LoadedModel, ids: number[]): Prom
   return probs;
 }
 
-export interface WordChance {
-  /** Chance the next word is `word` (lowercase + Capitalized spellings). */
-  p: number;
-  /** The token pieces GPT-2 uses for the most likely spelling, e.g. [" F", "ido"]. */
-  pieces: string[];
-}
-
-/**
- * Chance that the next word is `word`, even when GPT-2 builds it from
- * several pieces: P(" F") × P("ido" | … " F"). Sums the lowercase and
- * Capitalized spellings. (The spinner only draws one piece at a time, so a
- * multi-piece word can't come up as one spin; this tells kids how likely it
- * would be if the AI kept going.)
- */
-export async function wordChance(lm: LoadedModel, text: string, word: string): Promise<WordChance> {
-  const base = lm.tokenizer.encode(prepareText(text));
-  const spellings = [...new Set([word.toLowerCase(), word[0].toUpperCase() + word.slice(1).toLowerCase()])];
-  let total = 0;
-  let best = { p: -1, pieces: [] as string[] };
-  for (const spelling of spellings) {
-    const pieceIds = lm.tokenizer.encode(" " + spelling, { add_special_tokens: false });
-    let p = 1;
-    const ids = [...base];
-    for (const id of pieceIds) {
-      p *= (await probsAfterIds(lm, ids))[id];
-      ids.push(id);
-    }
-    total += p;
-    if (p > best.p) {
-      best = { p, pieces: pieceIds.map((id) => lm.tokenizer.decode([id], { clean_up_tokenization_spaces: false })) };
-    }
-  }
-  return { p: total, pieces: best.pieces };
+/** Token ids for one word with its leading space, e.g. " Fido" → [" F", "ido"]. */
+export function encodeWord(lm: LoadedModel, spaced: string): number[] {
+  return lm.tokenizer.encode(spaced, { add_special_tokens: false });
 }

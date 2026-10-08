@@ -1,22 +1,14 @@
 /// <reference lib="webworker" />
 /**
- * Runs GPT-2 off the main thread so the page stays responsive on a
- * Chromebook while the model loads and thinks.
+ * Browser mode only: runs GPT-2 off the main thread so the page stays
+ * responsive while the model loads and thinks.
  *
  * Model files are looked for first at /models/Xenova/gpt2/ (put there by
  * `npm run fetch-model`), then on huggingface.co. After the first load the
  * browser keeps them in its cache.
  */
 import { env } from "@huggingface/transformers";
-import {
-  decodeVocab,
-  encodeText,
-  loadGpt2,
-  probsAfterIds,
-  vocabSize,
-  wordChance,
-  type LoadedModel,
-} from "./core";
+import { decodeVocab, encodeText, encodeWord, loadGpt2, probsAfterIds, vocabSize, type LoadedModel } from "./core";
 import type { WorkerRequest, WorkerResponse } from "./protocol";
 
 env.allowLocalModels = true;
@@ -37,9 +29,7 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
       lm = await loadGpt2({
         device: "wasm",
         progress_callback: (p) => {
-          if (p.status === "progress_total") {
-            post({ type: "progress", loaded: p.loaded, total: p.total });
-          }
+          if (p.status === "progress_total") post({ type: "progress", loaded: p.loaded, total: p.total });
         },
       });
       post({
@@ -48,19 +38,14 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
         dtype: lm.dtype,
         loadMs: Math.round(performance.now() - t0),
       });
-    } else if (msg.type === "predict") {
-      if (!lm) throw new Error("Model not loaded");
-      const ids = encodeText(lm, msg.text);
-      const probs = await probsAfterIds(lm, ids);
-      post({ type: "probs", id: msg.id, probs, ids }, [probs.buffer]);
-    } else if (msg.type === "probsAfter") {
-      if (!lm) throw new Error("Model not loaded");
+      return;
+    }
+    if (!lm) throw new Error("Model not loaded");
+    if (msg.type === "encode") post({ type: "result", id: msg.id, value: encodeText(lm, msg.text) });
+    else if (msg.type === "encodeWord") post({ type: "result", id: msg.id, value: encodeWord(lm, msg.spaced) });
+    else if (msg.type === "probsAfter") {
       const probs = await probsAfterIds(lm, msg.ids);
-      post({ type: "probs", id: msg.id, probs }, [probs.buffer]);
-    } else if (msg.type === "wordChance") {
-      if (!lm) throw new Error("Model not loaded");
-      const { p, pieces } = await wordChance(lm, msg.text, msg.word);
-      post({ type: "wordChance", id: msg.id, p, pieces });
+      post({ type: "result", id: msg.id, value: probs }, [probs.buffer]);
     }
   } catch (err) {
     post({

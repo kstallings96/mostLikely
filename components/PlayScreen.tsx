@@ -5,10 +5,9 @@ import { GAME, PLURALS, ROUNDS } from "@/config/game";
 import { findBlockedWords, makeBlockSet } from "@/lib/blocklist";
 import { logEvent } from "@/lib/logger";
 import { guessOptions } from "@/lib/guess";
-import { probOf, topK, type MergedDist } from "@/lib/merge";
-import type { SpinnerModel } from "@/lib/model/client";
 import { OTHER_KEY } from "@/lib/normalize";
-import { countBy, cryptoRng, spin, type SpinResult } from "@/lib/sample";
+import { countBy, cryptoRng, type SpinResult } from "@/lib/sample";
+import { chanceOf, topWords, type SpinnerBackend, type SpinnerView } from "@/lib/spinner/types";
 import { chanceText, showToken, wordLabel } from "@/lib/format";
 import PeekPanel from "./PeekPanel";
 import { PredictWord, type Prediction } from "./Predict";
@@ -20,11 +19,12 @@ const SANDBOX = ROUNDS[0];
 
 type Step = "write" | "predict" | "ready" | "spinning" | "done";
 
-export default function PlayScreen({ model, teamCode }: { model: SpinnerModel; teamCode: string }) {
+export default function PlayScreen({ model, teamCode }: { model: SpinnerBackend; teamCode: string }) {
   const round = SANDBOX;
   const [draft, setDraft] = useState("");
   const [sentence, setSentence] = useState("");
-  const [dist, setDist] = useState<MergedDist | null>(null);
+  const [view, setView] = useState<SpinnerView | null>(null);
+  const [hiccup, setHiccup] = useState(false);
   const [options, setOptions] = useState<string[]>([]);
   const [step, setStep] = useState<Step>("write");
   const [thinking, setThinking] = useState(false);
@@ -39,7 +39,7 @@ export default function PlayScreen({ model, teamCode }: { model: SpinnerModel; t
       round: round.id,
       event_type: "spin_set",
       sentence,
-      distribution: dist ? topK(dist, 10) : null,
+      distribution: view ? topWords(view, 10) : null,
       prediction: prediction && "word" in prediction ? prediction : null,
       spin_results: {
         spins: results.map((r) => ({ word: r.key, token: r.text, ...(r.pieces && { pieces: r.pieces }) })),
@@ -58,17 +58,20 @@ export default function PlayScreen({ model, teamCode }: { model: SpinnerModel; t
       return;
     }
     setBlocked(false);
+    setHiccup(false);
     setThinking(true);
     try {
-      const d = await model.spinnerFor(text);
+      const v = await model.view(text);
       setSentence(text);
-      setDist(d);
-      setOptions(guessOptions(d, GAME.sandboxGuessOptions, cryptoRng));
+      setView(v);
+      setOptions(guessOptions(v.top, GAME.sandboxGuessOptions, cryptoRng));
       setPrediction(null);
       setPeek(false);
       anim.clear();
       setStep("predict");
-      logEvent({ round: round.id, event_type: "sentence_submitted", sentence: text, distribution: topK(d, 10) });
+      logEvent({ round: round.id, event_type: "sentence_submitted", sentence: text, distribution: topWords(v, 10) });
+    } catch {
+      setHiccup(true);
     } finally {
       setThinking(false);
     }
@@ -76,8 +79,8 @@ export default function PlayScreen({ model, teamCode }: { model: SpinnerModel; t
 
   async function pickPrediction(p: Prediction) {
     // A typed guess: look up its chance, even if GPT-2 builds it from pieces.
-    if ("word" in p && p.custom && dist) {
-      const merged = probOf(dist, p.word);
+    if ("word" in p && p.custom && view) {
+      const merged = chanceOf(view, p.word);
       if (merged > 0) p = { ...p, chance: merged };
       else {
         try {
@@ -94,13 +97,14 @@ export default function PlayScreen({ model, teamCode }: { model: SpinnerModel; t
   }
 
   async function doSpin() {
-    if (!dist) return;
+    if (!view) return;
+    setHiccup(false);
     setStep("spinning");
     try {
-      anim.start(await model.spin(dist, round.spins, cryptoRng));
+      anim.start(await model.spin(view, round.spins));
     } catch {
-      // If finishing words fails, fall back to plain one-piece spins.
-      anim.start(spin(dist, round.spins, cryptoRng));
+      setHiccup(true);
+      setStep("ready");
     }
   }
 
@@ -111,7 +115,7 @@ export default function PlayScreen({ model, teamCode }: { model: SpinnerModel; t
   }
 
   function togglePeek() {
-    if (!peek && dist) logEvent({ round: round.id, event_type: "peek", sentence, distribution: topK(dist, 10) });
+    if (!peek && view) logEvent({ round: round.id, event_type: "peek", sentence, distribution: topWords(view, 10) });
     setPeek(!peek);
   }
 
@@ -155,6 +159,7 @@ export default function PlayScreen({ model, teamCode }: { model: SpinnerModel; t
                   <span className="text-3xl font-bold text-muted">___</span>
                 </div>
                 {blocked && <p className="text-xl text-coral">🙂 Let’s try different words.</p>}
+                {hiccup && <p className="text-xl text-coral">😅 The spinner hiccuped. Try again!</p>}
                 <button
                   type="submit"
                   disabled={!draft.trim() || thinking}
@@ -183,6 +188,7 @@ export default function PlayScreen({ model, teamCode }: { model: SpinnerModel; t
 
           {(step === "ready" || step === "done") && (
             <div className="flex flex-col gap-3">
+              {hiccup && <p className="text-xl text-coral">😅 The spinner hiccuped. Try again!</p>}
               {step === "done" && anim.results && (
                 <SandboxSummary results={anim.results} prediction={prediction} />
               )}
@@ -194,13 +200,13 @@ export default function PlayScreen({ model, teamCode }: { model: SpinnerModel; t
               </button>
             </div>
           )}
-          {dist && step !== "write" && (
+          {view && step !== "write" && (
             <div className={`min-h-0 rounded-3xl border-4 border-line bg-card p-4 ${peek ? "flex-1" : ""}`}>
               {peek ? (
                 <div className="flex h-full min-h-0 flex-col gap-1">
                   <div className="min-h-0 flex-1">
                     <PeekPanel
-                      dist={dist}
+                      bars={view.bars}
                       xray={xray}
                       onToggleXray={() => {
                         logEvent({ round: round.id, event_type: "xray_toggle", sentence });

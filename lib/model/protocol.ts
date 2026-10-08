@@ -1,12 +1,11 @@
 export type WorkerRequest =
   | { type: "load" }
-  | { type: "predict"; id: number; text: string }
-  | { type: "probsAfter"; id: number; ids: number[] }
-  | { type: "wordChance"; id: number; text: string; word: string };
+  | { type: "encode"; id: number; text: string }
+  | { type: "encodeWord"; id: number; spaced: string }
+  | { type: "probsAfter"; id: number; ids: number[] };
 
 export type WorkerResponse =
   | { type: "progress"; loaded: number; total: number }
   | { type: "ready"; vocab: string[]; dtype: string; loadMs: number }
-  | { type: "probs"; id: number; probs: Float32Array; ids?: number[] }
-  | { type: "wordChance"; id: number; p: number; pieces: string[] }
+  | { type: "result"; id: number; value: number[] | Float32Array }
   | { type: "error"; id?: number; message: string };

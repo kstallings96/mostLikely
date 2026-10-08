@@ -25,7 +25,7 @@ export const BLOCKLIST: string[] = [
   "sex", "sexy", "sexual", "porn", "porno", "nude", "naked", "penis", "vagina",
   "boob", "boobs", "tits", "pussy", "cum", "orgasm", "horny", "rape", "raped",
   "rapist", "slut", "whore", "hooker", "prostitute", "erotic", "masturbate",
-  "condom", "viagra", "dildo", "anal", "fetish",
+  "condom", "viagra", "dildo", "anal", "fetish", "pecker", "boner", "titty", "knob",
   // slurs (abbreviated starter set)
   "nigger", "nigga", "fag", "faggot", "dyke", "retard", "retarded", "spic",
   "chink", "kike", "wetback", "tranny",

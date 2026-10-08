@@ -58,8 +58,11 @@ export default function StartScreen({
 }
 
 function ModelStatus({ state }: { state: ModelState | null }) {
-  if (!state || state.status === "loading") {
-    const frac = state && state.total ? state.loaded / state.total : 0;
+  if (!state || (state.status === "loading" && state.mode === "server")) {
+    return <p className="text-sm text-muted">Getting the spinner ready…</p>;
+  }
+  if (state.status === "loading") {
+    const frac = state.total ? state.loaded / state.total : 0;
     return (
       <div className="flex w-full max-w-md items-center gap-3 text-muted" aria-live="polite">
         <span className="text-sm">Getting the spinner ready</span>

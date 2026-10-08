@@ -4,7 +4,6 @@
  * filler and offer the most likely *interesting* words plus one long shot.
  * The Peek bars and the spins still show the filler honestly.
  */
-import type { MergedDist } from "./merge";
 import { END_KEY, OTHER_KEY } from "./normalize";
 import type { Rng } from "./sample";
 
@@ -30,8 +29,8 @@ export function isInterestingWord(key: string): boolean {
  * shot from a little further down, shuffled. Falls back to any word if a
  * sentence has too few interesting ones.
  */
-export function guessOptions(dist: MergedDist, n: number, rng: Rng): string[] {
-  const words = dist.entries.map((e) => e.key).filter((k) => k !== OTHER_KEY && k !== END_KEY);
+export function guessOptions(entries: { key: string }[], n: number, rng: Rng): string[] {
+  const words = entries.map((e) => e.key).filter((k) => k !== OTHER_KEY && k !== END_KEY);
   const interesting = words.filter(isInterestingWord);
   const pool = interesting.length >= n ? interesting : [...interesting, ...words.filter((w) => !interesting.includes(w))];
   const picks = pool.slice(0, n - 1);

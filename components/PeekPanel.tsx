@@ -1,23 +1,21 @@
 "use client";
 
-import { GAME } from "@/config/game";
 import { pct, showToken, wordLabel } from "@/lib/format";
-import { displayBars, type MergedDist, type MergedEntry } from "@/lib/merge";
+import type { MergedEntry } from "@/lib/merge";
 import { OTHER_KEY, OTHER_WORDS_KEY } from "@/lib/normalize";
 
 /** The spinner's chances for this sentence. A peek, not the score. */
 export default function PeekPanel({
-  dist,
+  bars,
   xray,
   onToggleXray,
   highlight = [],
 }: {
-  dist: MergedDist;
+  bars: MergedEntry[];
   xray: boolean;
   onToggleXray: () => void;
   highlight?: string[];
 }) {
-  const bars = displayBars(dist, GAME.displayBars, GAME.xrayTokensPerBar);
   const max = Math.max(...bars.map((b) => b.p));
 
   return (

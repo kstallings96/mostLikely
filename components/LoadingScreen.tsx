@@ -36,11 +36,14 @@ export default function LoadingScreen({ state }: { state: ModelState | null }) {
     <main className="flex flex-1 flex-col items-center justify-center gap-8 p-6 text-center" aria-live="polite">
       <Wheel spinning className="h-40 w-40" />
       <h1 className="text-4xl font-bold">Building your word spinner…</h1>
-      <div className="h-6 w-full max-w-xl overflow-hidden rounded-full border-2 border-line bg-card">
-        <div className="h-full rounded-full bg-brand transition-all" style={{ width: `${frac * 100}%` }} />
-      </div>
+      {loading?.mode !== "server" && (
+        <div className="h-6 w-full max-w-xl overflow-hidden rounded-full border-2 border-line bg-card">
+          <div className="h-full rounded-full bg-brand transition-all" style={{ width: `${frac * 100}%` }} />
+        </div>
+      )}
       <p className="text-xl text-muted">
-        The first time takes a minute. Next time is fast! {seconds > 0 && <span>({seconds}s)</span>}
+        {loading?.mode === "server" ? "Almost ready…" : "The first time takes a minute. Next time is fast!"}{" "}
+        {seconds > 0 && <span>({seconds}s)</span>}
       </p>
       {loading && loading.total > 0 && (
         <p className="text-base text-muted">
