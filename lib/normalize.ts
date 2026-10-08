@@ -11,6 +11,8 @@
 
 export const END_KEY = "(sentence ends)";
 export const OTHER_KEY = "(other)";
+/** Display-only: the Peek bar that groups real words below the top few. */
+export const OTHER_WORDS_KEY = "(other words)";
 
 export type NormalizedToken =
   | { kind: "word"; word: string }
@@ -71,6 +73,7 @@ export function wordsOf(text: string): string[] {
 /** Friendly label for a merge key. */
 export function keyLabel(key: string): string {
   if (key === END_KEY) return "(sentence ends)";
-  if (key === OTHER_KEY) return "(something else)";
+  if (key === OTHER_KEY) return "pieces & punctuation";
+  if (key === OTHER_WORDS_KEY) return "other words";
   return key;
 }

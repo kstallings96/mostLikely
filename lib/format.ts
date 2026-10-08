@@ -1,4 +1,4 @@
-import { END_KEY, OTHER_KEY } from "./normalize";
+import { keyLabel, OTHER_KEY, END_KEY } from "./normalize";
 
 /** Kid-friendly percent: "42%", "3%", "<1%". */
 export function pct(p: number): string {
@@ -12,11 +12,7 @@ export function showToken(text: string): string {
   return text.replace(/^ /, "␣").replace(/\n/g, "↵");
 }
 
-export function wordLabel(key: string): string {
-  if (key === END_KEY) return "(sentence ends)";
-  if (key === OTHER_KEY) return "(something else)";
-  return key;
-}
+export const wordLabel = keyLabel;
 
 /** What to say a spin "said": the word, or the raw piece for "other". */
 export function spokenText(key: string, tokenText: string): string {

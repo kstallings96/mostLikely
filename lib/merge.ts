@@ -11,7 +11,7 @@
  * "other" instead of being silently rescaled away.
  */
 import { applyBlockedMask } from "./blocklist";
-import { OTHER_KEY, tokenKey } from "./normalize";
+import { END_KEY, OTHER_KEY, OTHER_WORDS_KEY, tokenKey } from "./normalize";
 
 export interface VocabIndex {
   /** Decoded text of each token id. */
@@ -90,24 +90,36 @@ export function probOf(dist: MergedDist, key: string): number {
 }
 
 /**
- * Bars for the Peek view: the top `n` kid words (and "(sentence ends)" if it
- * makes the cut), plus one "other" bar holding fragments, punctuation and
- * every word below the cut. The bars always sum to 1.
+ * Bars for the Peek view, always summing to 1:
+ *   - the top `n` kid words (and "(sentence ends)" if it makes the cut),
+ *   - "other words": the long tail of real words below the cut,
+ *   - "pieces & punctuation": word fragments, commas, quotes, and
+ *     "(sentence ends)" if it missed the cut.
+ * Two separate leftover bars, because "thousands of rare words" and
+ * "commas and word scraps" are different ideas for kids.
  */
-export function displayBars(dist: MergedDist, n: number): MergedEntry[] {
+export function displayBars(dist: MergedDist, n: number, xrayTokensPerBar = 8): MergedEntry[] {
   const shown = dist.entries.filter((e) => e.key !== OTHER_KEY).slice(0, n);
   const shownKeys = new Set(shown.map((e) => e.key));
   const rest = dist.entries.filter((e) => !shownKeys.has(e.key));
-  const other: MergedEntry = {
-    key: OTHER_KEY,
-    p: rest.reduce((s, e) => s + e.p, 0),
-    tokenCount: rest.reduce((s, e) => s + e.tokenCount, 0),
-    tokens: rest
+  const isPiece = (e: MergedEntry) => e.key === OTHER_KEY || e.key === END_KEY;
+  const leftovers = [
+    combine(OTHER_WORDS_KEY, rest.filter((e) => !isPiece(e)), xrayTokensPerBar),
+    combine(OTHER_KEY, rest.filter(isPiece), xrayTokensPerBar),
+  ];
+  return [...shown, ...leftovers.filter((b) => b.p > 0)];
+}
+
+function combine(key: string, entries: MergedEntry[], xrayTokensPerBar: number): MergedEntry {
+  return {
+    key,
+    p: entries.reduce((s, e) => s + e.p, 0),
+    tokenCount: entries.reduce((s, e) => s + e.tokenCount, 0),
+    tokens: entries
       .flatMap((e) => e.tokens)
       .sort((a, b) => b.p - a.p)
-      .slice(0, shown[0]?.tokens.length ?? 8),
+      .slice(0, xrayTokensPerBar),
   };
-  return other.p > 0 ? [...shown, other] : shown;
 }
 
 /** Compact top-k summary for research logs: [{word, p}]. */

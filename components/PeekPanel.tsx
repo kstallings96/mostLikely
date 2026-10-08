@@ -3,7 +3,7 @@
 import { GAME } from "@/config/game";
 import { pct, showToken, wordLabel } from "@/lib/format";
 import { displayBars, type MergedDist } from "@/lib/merge";
-import { OTHER_KEY } from "@/lib/normalize";
+import { OTHER_KEY, OTHER_WORDS_KEY } from "@/lib/normalize";
 
 /** The spinner's chances for this sentence. A peek, not the score. */
 export default function PeekPanel({
@@ -17,7 +17,7 @@ export default function PeekPanel({
   onToggleXray: () => void;
   highlight?: string[];
 }) {
-  const bars = displayBars(dist, GAME.displayBars);
+  const bars = displayBars(dist, GAME.displayBars, GAME.xrayTokensPerBar);
   const max = Math.max(...bars.map((b) => b.p));
 
   return (
@@ -37,7 +37,8 @@ export default function PeekPanel({
       <ul className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pr-1">
         {bars.map((b) => {
           const target = highlight.includes(b.key);
-          const other = b.key === OTHER_KEY;
+          const pieces = b.key === OTHER_KEY;
+          const otherWords = b.key === OTHER_WORDS_KEY;
           return (
             <li key={b.key} className="flex flex-col">
               <div className="flex items-center gap-2">
@@ -49,7 +50,7 @@ export default function PeekPanel({
                     className="h-full rounded-md"
                     style={{
                       width: `${Math.max(1, (b.p / max) * 100)}%`,
-                      background: target ? "#12a37f" : other ? "#9aa1ad" : "#5b3cc4",
+                      background: target ? "#12a37f" : pieces ? "#9aa1ad" : otherWords ? "#a99be0" : "#5b3cc4",
                     }}
                   />
                 </div>

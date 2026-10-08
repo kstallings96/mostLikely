@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { END_KEY, OTHER_KEY } from "@/lib/normalize";
+import { END_KEY, OTHER_KEY, OTHER_WORDS_KEY } from "@/lib/normalize";
 import { buildVocabIndex, displayBars, mergeDistribution, probOf, topK } from "@/lib/merge";
 
 const PLURALS = { dogs: "dog", cats: "cat" };
@@ -35,10 +35,17 @@ describe("mergeDistribution", () => {
 
 describe("displayBars", () => {
   const dist = mergeDistribution(PROBS, index, none);
-  it("shows the top n and folds the rest into other", () => {
+  it("splits leftovers into other words vs pieces & punctuation", () => {
     const bars = displayBars(dist, 2);
-    expect(bars.map((b) => b.key)).toEqual(["dog", "cat", OTHER_KEY]);
-    expect(bars[2].p).toBeCloseTo(0.35); // end + other + bear + fish
+    expect(bars.map((b) => b.key)).toEqual(["dog", "cat", OTHER_WORDS_KEY, OTHER_KEY]);
+    expect(bars[2].p).toBeCloseTo(0.1); // bear + fish
+    expect(bars[2].tokens.map((t) => t.text)).toEqual([" bear", " fish"]);
+    expect(bars[3].p).toBeCloseTo(0.25); // "." + "ite" + ","
+    expect(bars.reduce((s, b) => s + b.p, 0)).toBeCloseTo(1);
+  });
+  it("drops an empty leftover bar", () => {
+    const bars = displayBars(dist, 10);
+    expect(bars.map((b) => b.key)).not.toContain(OTHER_WORDS_KEY);
     expect(bars.reduce((s, b) => s + b.p, 0)).toBeCloseTo(1);
   });
   it("can include (sentence ends) as a bar", () => {

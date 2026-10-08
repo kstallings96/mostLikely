@@ -26,7 +26,7 @@ describe("normalizeToken", () => {
     expect(normalizeToken(" a")).toEqual({ kind: "word", word: "a" });
     expect(normalizeToken(" 7")).toEqual({ kind: "word", word: "7" });
   });
-  it("labels the other bucket so it can't be confused with the word 'other'", () => {
+  it("labels the leftover buckets so they can't be confused with real words", () => {
     expect(keyLabel(OTHER_KEY)).not.toBe(keyLabel(tokenKey(" other", PLURALS)));
   });
   it("sends fragments, commas, and odd bytes to other", () => {
