@@ -20,12 +20,20 @@ export const GAME = {
    * below this.
    */
   luckyThreshold: 0.2,
+  /**
+   * "So close!" note: shown when a kid misses even though their sentence
+   * passes at least this often. Spins are chance, so a good sentence can
+   * still miss.
+   */
+  unluckyThreshold: 0.5,
   /** How many kid-word bars to show when peeking (everything else = "other"). */
   displayBars: 8,
   /** Raw tokens listed under each bar in X-ray mode. */
   xrayTokensPerBar: 8,
   /** Words to offer as guesses in the Sandbox prediction step. */
   sandboxGuessOptions: 4,
+  /** Spin sets in the Sandbox before the "Ready for a challenge?" button shows. */
+  sandboxSetsBeforeNext: 2,
 };
 
 /**

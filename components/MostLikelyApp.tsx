@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { logEvent, recoverUnsent, startSession } from "@/lib/logger";
 import { useSpinnerModel } from "@/lib/useSpinnerModel";
 import LoadingScreen from "./LoadingScreen";
-import PlayScreen from "./PlayScreen";
+import Game from "./Game";
 import StartScreen from "./StartScreen";
 
 export default function MostLikelyApp() {
@@ -47,5 +47,5 @@ export default function MostLikelyApp() {
     );
   }
   if (!model || state?.status !== "ready") return <LoadingScreen state={state} />;
-  return <PlayScreen model={model} player={player} />;
+  return <Game model={model} player={player} />;
 }

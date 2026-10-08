@@ -99,7 +99,7 @@ export function PredictCount({
       <p className="text-2xl font-bold">
         🤔 How many <span className="text-brand">“{word}”</span> out of {spins}?
       </p>
-      <div className="grid grid-cols-6 gap-2">
+      <div className={`grid gap-2 ${spins > 10 ? "grid-cols-7" : "grid-cols-6"}`}>
         {Array.from({ length: spins + 1 }, (_, n) => (
           <button
             key={n}
