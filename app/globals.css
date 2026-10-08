@@ -1,0 +1,82 @@
+@import "tailwindcss";
+
+/*
+ * Light theme only: the activity runs on Chromebooks and classroom
+ * projectors, where a bright, high-contrast page reads best.
+ */
+@theme inline {
+  --font-sans: var(--font-atkinson), system-ui, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+
+  --color-ink: #1d2433;
+  --color-muted: #5b6475;
+  --color-paper: #fffaf2;
+  --color-card: #ffffff;
+  --color-line: #e7dfd2;
+
+  --color-brand: #5b3cc4;
+  --color-brand-soft: #ece7fb;
+  --color-sun: #ffb020;
+  --color-sun-soft: #fff1d6;
+  --color-mint: #12a37f;
+  --color-mint-soft: #ddf5ed;
+  --color-coral: #e4572e;
+  --color-sky: #2d7ff9;
+  --color-sky-soft: #e3eeff;
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+}
+
+@keyframes drop-in {
+  from {
+    transform: translateY(-48px) scale(0.6);
+    opacity: 0;
+  }
+  70% {
+    transform: translateY(4px) scale(1.05);
+    opacity: 1;
+  }
+  to {
+    transform: none;
+  }
+}
+.animate-drop-in {
+  animation: drop-in 260ms cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+
+@keyframes wobble-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.animate-wheel {
+  animation: wobble-spin 0.6s linear infinite;
+}
+
+@keyframes pop {
+  0% {
+    transform: scale(0.7);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: none;
+  }
+}
+.animate-pop {
+  animation: pop 300ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-drop-in,
+  .animate-wheel,
+  .animate-pop {
+    animation: none;
+  }
+}
