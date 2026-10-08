@@ -42,7 +42,7 @@ export default function PlayScreen({ model, teamCode }: { model: SpinnerModel; t
       distribution: dist ? topK(dist, 10) : null,
       prediction: prediction && "word" in prediction ? prediction : null,
       spin_results: {
-        spins: results.map((r) => ({ word: r.key, token: r.text })),
+        spins: results.map((r) => ({ word: r.key, token: r.text, ...(r.pieces && { pieces: r.pieces }) })),
         counts: countBy(results),
         skipped_animation: skipped,
       },
@@ -93,10 +93,15 @@ export default function PlayScreen({ model, teamCode }: { model: SpinnerModel; t
     if ("word" in p) logEvent({ round: round.id, event_type: "prediction", sentence, prediction: p });
   }
 
-  function doSpin() {
+  async function doSpin() {
     if (!dist) return;
     setStep("spinning");
-    anim.start(spin(dist, round.spins, cryptoRng));
+    try {
+      anim.start(await model.spin(dist, round.spins, cryptoRng));
+    } catch {
+      // If finishing words fails, fall back to plain one-piece spins.
+      anim.start(spin(dist, round.spins, cryptoRng));
+    }
   }
 
   function editSentence() {
@@ -223,7 +228,13 @@ export default function PlayScreen({ model, teamCode }: { model: SpinnerModel; t
         {/* Right: live results */}
         <section className="flex min-h-0 flex-col gap-3">
           <div className="min-h-0 flex-1 rounded-3xl border-4 border-line bg-card p-4">
-            <SpinBoard results={anim.results} revealed={anim.revealed} spins={round.spins} onSkip={anim.skip} />
+            <SpinBoard
+              results={anim.results}
+              revealed={anim.revealed}
+              spins={round.spins}
+              preparing={step === "spinning" && !anim.results}
+              onSkip={anim.skip}
+            />
           </div>
         </section>
       </main>

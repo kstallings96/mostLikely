@@ -51,6 +51,8 @@ export interface MergedDist {
   /** Token-level probabilities after blocking; spins sample from these. */
   tokenProbs: Float64Array;
   index: VocabIndex;
+  /** Token ids of the sentence itself (set by the model client; used to finish words). */
+  contextIds?: number[];
 }
 
 export function mergeDistribution(

@@ -82,11 +82,15 @@ export function prepareText(text: string): string {
 
 /** Softmax over the logits at the last position: P(next token | text). */
 export async function nextTokenProbs(lm: LoadedModel, text: string): Promise<Float32Array> {
-  return probsAfterIds(lm, lm.tokenizer.encode(prepareText(text)));
+  return probsAfterIds(lm, encodeText(lm, text));
+}
+
+export function encodeText(lm: LoadedModel, text: string): number[] {
+  return lm.tokenizer.encode(prepareText(text));
 }
 
 /** P(next token | these token ids). */
-async function probsAfterIds({ model }: LoadedModel, ids: number[]): Promise<Float32Array> {
+export async function probsAfterIds({ model }: LoadedModel, ids: number[]): Promise<Float32Array> {
   const input_ids = new Tensor("int64", BigInt64Array.from(ids.map(BigInt)), [1, ids.length]);
   const attention_mask = new Tensor("int64", new BigInt64Array(ids.length).fill(BigInt(1)), [1, ids.length]);
   const { logits } = await model({ input_ids, attention_mask });

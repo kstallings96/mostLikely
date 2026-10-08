@@ -51,6 +51,8 @@ export interface SpinResult {
   text: string;
   /** Probability of this kid word for the sentence (for "Whoa!" moments). */
   p: number;
+  /** Set when the spin landed on a word start and was finished: [" D", "uke"]. */
+  pieces?: string[];
 }
 
 /**

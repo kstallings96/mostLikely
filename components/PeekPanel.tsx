@@ -58,6 +58,11 @@ export default function PeekPanel({
                 </div>
                 <span className="w-12 shrink-0 text-right text-lg font-bold">{pct(b.p)}</span>
               </div>
+              {b.key === OTHER_KEY && (
+                <p className="ml-36 pl-2 text-sm text-muted">
+                  Starts of words, quotes, commas. Spins that land on a word start get finished ✨
+                </p>
+              )}
               {b.key === OTHER_WORDS_KEY && !!b.partCount && (
                 <p className="ml-36 pl-2 text-sm text-muted">
                   {b.partCount.toLocaleString()} different words, each a tiny slice

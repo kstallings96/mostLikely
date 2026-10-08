@@ -1,7 +1,7 @@
 "use client";
 
 import { GAME } from "@/config/game";
-import { spokenText, wordLabel } from "@/lib/format";
+import { showToken, spokenText, wordLabel } from "@/lib/format";
 import { OTHER_KEY } from "@/lib/normalize";
 import type { SpinResult } from "@/lib/sample";
 import Wheel from "./Wheel";
@@ -22,6 +22,7 @@ export default function SpinBoard({
   revealed,
   spins,
   highlight = [],
+  preparing = false,
   onSkip,
 }: {
   results: SpinResult[] | null;
@@ -29,8 +30,18 @@ export default function SpinBoard({
   spins: number;
   /** Words to color as targets (e.g. "dog"). */
   highlight?: string[];
+  /** True while spins are being drawn (finishing words takes a moment). */
+  preparing?: boolean;
   onSkip?: () => void;
 }) {
+  if (!results && preparing) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-3">
+        <Wheel spinning className="h-24 w-24" />
+        <p className="text-xl font-bold">Spinning…</p>
+      </div>
+    );
+  }
   if (!results) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 text-muted">
@@ -65,6 +76,11 @@ export default function SpinBoard({
               <b className={isSurprise(latest) ? "text-coral" : "text-brand"}>
                 {spokenText(latest.key, latest.text)}
               </b>
+              {latest.pieces && latest.pieces.length > 1 && (
+                <span className="ml-2 text-base text-muted">
+                  ({latest.pieces.map(showToken).join(" + ")})
+                </span>
+              )}
             </span>
           )}
         </div>
@@ -86,7 +102,7 @@ export default function SpinBoard({
                 {c.items.map(({ r, i }) => (
                   <div
                     key={i}
-                    title={r.text}
+                    title={(r.pieces ?? [r.text]).map(showToken).join(" + ")}
                     className={`animate-drop-in w-full rounded-md ${isSurprise(r) ? "ring-4 ring-sun" : ""}`}
                     style={{ height: chipH, background: color }}
                   />

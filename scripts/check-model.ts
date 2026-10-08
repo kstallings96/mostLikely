@@ -11,7 +11,8 @@ import { env } from "@huggingface/transformers";
 import { GAME, PLURALS, allTargetWords } from "@/config/game";
 import { buildBlockedMask, makeBlockSet } from "@/lib/blocklist";
 import { buildVocabIndex, displayBars, mergeDistribution, probOf } from "@/lib/merge";
-import { decodeVocab, loadGpt2, nextTokenProbs, vocabSize, wordChance } from "@/lib/model/core";
+import { spinAndFinish } from "@/lib/finish";
+import { decodeVocab, encodeText, loadGpt2, nextTokenProbs, probsAfterIds, vocabSize, wordChance } from "@/lib/model/core";
 import { keyLabel } from "@/lib/normalize";
 import { countBy, cryptoRng, spin } from "@/lib/sample";
 import path from "node:path";
@@ -70,7 +71,25 @@ async function main() {
     console.log(`  10 spins: ${Object.entries(counts).map(([k, n]) => `${keyLabel(k)}×${n}`).join(", ")}\n`);
   }
 
-  // 3. Multi-piece guesses ("fido" is not one token)
+  // 3. Finish the word: spins that land on " D" or ' "' become whole words
+  {
+    const s = "my dogs name is";
+    const dist = mergeDistribution(await nextTokenProbs(lm, s), index, mask, GAME.xrayTokensPerBar);
+    const t3 = Date.now();
+    const results = await spinAndFinish(dist, encodeText(lm, s), 20, cryptoRng, {
+      next: (ids) => probsAfterIds(lm, ids),
+      texts: index.texts,
+      mask,
+      blockSet: makeBlockSet(),
+      plurals: PLURALS,
+    });
+    const finished = results.filter((r) => r.pieces);
+    console.log(`"${s} ___" — 20 spins in ${Date.now() - t3}ms, ${finished.length} finished:`);
+    const shown = results.map((r) => (r.pieces ? `${keyLabel(r.key)} (${r.pieces.join("+")})` : keyLabel(r.key)));
+    console.log(`  ${shown.join(", ")}\n`);
+  }
+
+  // 4. Multi-piece guesses ("fido" is not one token)
   for (const [s, w] of [["My dog's name is", "fido"], ["My dog's name is", "max"]] as const) {
     const c = await wordChance(lm, s, w);
     console.log(`Chance "${s} ${w}": ${pct(c.p)} via ${c.pieces.map((p) => JSON.stringify(p)).join(" + ")}`);

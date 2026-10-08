@@ -5,7 +5,11 @@
 import { GAME, PLURALS } from "@/config/game";
 import { buildBlockedMask, makeBlockSet } from "@/lib/blocklist";
 import { buildVocabIndex, mergeDistribution, type MergedDist, type VocabIndex } from "@/lib/merge";
+import { spinAndFinish } from "@/lib/finish";
+import type { Rng, SpinResult } from "@/lib/sample";
 import type { WorkerRequest, WorkerResponse } from "./protocol";
+
+const blockSet = makeBlockSet();
 
 export interface WordChance {
   p: number;
@@ -37,10 +41,10 @@ export class SpinnerModel {
         if (msg.type === "progress") onProgress?.(msg.loaded, msg.total);
         else if (msg.type === "ready") {
           this.index = buildVocabIndex(msg.vocab, PLURALS);
-          this.mask = buildBlockedMask(msg.vocab, makeBlockSet(), PLURALS);
+          this.mask = buildBlockedMask(msg.vocab, blockSet, PLURALS);
           resolve({ dtype: msg.dtype, loadMs: msg.loadMs });
         } else if (msg.type === "probs") {
-          this.pending.get(msg.id)?.resolve(msg.probs);
+          this.pending.get(msg.id)?.resolve(msg.ids ? { probs: msg.probs, ids: msg.ids } : msg.probs);
           this.pending.delete(msg.id);
         } else if (msg.type === "wordChance") {
           this.pending.get(msg.id)?.resolve({ p: msg.p, pieces: msg.pieces });
@@ -72,8 +76,23 @@ export class SpinnerModel {
   /** Blocked-and-merged next-word spinner for a sentence. */
   async spinnerFor(text: string): Promise<MergedDist> {
     await this.ready;
-    const probs = await this.request<Float32Array>({ type: "predict", text });
-    return mergeDistribution(probs, this.index!, this.mask!, GAME.xrayTokensPerBar);
+    const { probs, ids } = await this.request<{ probs: Float32Array; ids: number[] }>({ type: "predict", text });
+    return { ...mergeDistribution(probs, this.index!, this.mask!, GAME.xrayTokensPerBar), contextIds: ids };
+  }
+
+  /**
+   * Spin `n` times, finishing spins that land on a word start or opening
+   * quote (" D" + "uke" → "duke").
+   */
+  async spin(dist: MergedDist, n: number, rng: Rng): Promise<SpinResult[]> {
+    await this.ready;
+    return spinAndFinish(dist, dist.contextIds ?? [], n, rng, {
+      next: (ids) => this.request<Float32Array>({ type: "probsAfter", ids }),
+      texts: this.index!.texts,
+      mask: this.mask!,
+      blockSet,
+      plurals: PLURALS,
+    });
   }
 
   /**
