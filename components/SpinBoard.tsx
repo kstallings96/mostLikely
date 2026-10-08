@@ -100,7 +100,9 @@ export default function SpinBoard({
         {columns.map((c) => (
           <div
             key={c.key}
-            className={`min-w-14 flex-1 text-center text-base leading-tight break-words ${
+            className={`min-w-14 flex-1 text-center leading-tight text-balance hyphens-none ${
+              wordLabel(c.key).length > 12 ? "text-sm" : "text-base"
+            } ${
               highlight.includes(c.key) ? "font-bold text-mint" : ""
             }`}
             style={{ maxWidth: 120 }}

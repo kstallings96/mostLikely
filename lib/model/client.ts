@@ -7,15 +7,24 @@ import { buildBlockedMask, makeBlockSet } from "@/lib/blocklist";
 import { buildVocabIndex, mergeDistribution, type MergedDist, type VocabIndex } from "@/lib/merge";
 import type { WorkerRequest, WorkerResponse } from "./protocol";
 
+export interface WordChance {
+  p: number;
+  /** Token pieces for the word, e.g. [" F", "ido"]. */
+  pieces: string[];
+}
+
 export interface LoadInfo {
   dtype: string;
   loadMs: number;
 }
 
+type WithoutId<T> = T extends unknown ? Omit<T, "id"> : never;
+
 export class SpinnerModel {
   private worker: Worker;
   private nextId = 1;
-  private pending = new Map<number, { resolve: (p: Float32Array) => void; reject: (e: Error) => void }>();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private pending = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void }>();
   private index: VocabIndex | null = null;
   private mask: Uint8Array | null = null;
   readonly ready: Promise<LoadInfo>;
@@ -33,6 +42,9 @@ export class SpinnerModel {
         } else if (msg.type === "probs") {
           this.pending.get(msg.id)?.resolve(msg.probs);
           this.pending.delete(msg.id);
+        } else if (msg.type === "wordChance") {
+          this.pending.get(msg.id)?.resolve({ p: msg.p, pieces: msg.pieces });
+          this.pending.delete(msg.id);
         } else if (msg.type === "error") {
           if (msg.id === undefined) reject(new Error(msg.message));
           else {
@@ -49,15 +61,28 @@ export class SpinnerModel {
     this.worker.postMessage(msg);
   }
 
+  private request<T>(msg: WithoutId<Extract<WorkerRequest, { id: number }>>): Promise<T> {
+    const id = this.nextId++;
+    return new Promise<T>((resolve, reject) => {
+      this.pending.set(id, { resolve, reject });
+      this.send({ ...msg, id } as WorkerRequest);
+    });
+  }
+
   /** Blocked-and-merged next-word spinner for a sentence. */
   async spinnerFor(text: string): Promise<MergedDist> {
     await this.ready;
-    const id = this.nextId++;
-    const probs = await new Promise<Float32Array>((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
-      this.send({ type: "predict", id, text });
-    });
+    const probs = await this.request<Float32Array>({ type: "predict", text });
     return mergeDistribution(probs, this.index!, this.mask!, GAME.xrayTokensPerBar);
+  }
+
+  /**
+   * Chance the next word is `word`, chaining pieces for words GPT-2 builds
+   * from several tokens ("fido" = " F" + "ido").
+   */
+  async wordChance(text: string, word: string): Promise<WordChance> {
+    await this.ready;
+    return this.request<WordChance>({ type: "wordChance", text, word });
   }
 
   dispose() {

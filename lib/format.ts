@@ -7,6 +7,16 @@ export function pct(p: number): string {
   return `${Math.round(p * 100)}%`;
 }
 
+/** Chance in kid terms: "12%", or "about 1 in 4,000" when under 1%. */
+export function chanceText(p: number): string {
+  if (p >= 0.01) return pct(p);
+  if (p <= 0) return "almost zero";
+  const n = 1 / p;
+  const digits = Math.floor(Math.log10(n)) - 1;
+  const rounded = Math.round(n / 10 ** digits) * 10 ** digits;
+  return `about 1 in ${rounded.toLocaleString("en-US")}`;
+}
+
 /** Show a raw token so its spaces are visible: " dog" → "␣dog". */
 export function showToken(text: string): string {
   return text.replace(/^ /, "␣").replace(/\n/g, "↵");

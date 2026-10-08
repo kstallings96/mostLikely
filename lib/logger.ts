@@ -42,7 +42,8 @@ export interface EventRecord {
   /** Merged top-10 kid words: [{word, p}] */
   distribution: { word: string; p: number }[] | null;
   /** A count ("dog ×7") or a word, depending on the round. */
-  prediction: { word: string; count?: number } | null;
+  /** custom: the kid typed their own word; chance: its probability for the sentence. */
+  prediction: { word: string; count?: number; custom?: boolean; chance?: number; pieces?: string[] } | null;
   /** Spin results: [{word, token}] in order, plus anything round-specific. */
   spin_results: unknown;
   words_changed: number | null;

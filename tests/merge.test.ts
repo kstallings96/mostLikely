@@ -40,6 +40,11 @@ describe("displayBars", () => {
     expect(bars.map((b) => b.key)).toEqual(["dog", "cat", OTHER_WORDS_KEY, OTHER_KEY]);
     expect(bars[2].p).toBeCloseTo(0.1); // bear + fish
     expect(bars[2].tokens.map((t) => t.text)).toEqual([" bear", " fish"]);
+    expect(bars[2].parts).toEqual([
+      { key: "bear", p: expect.closeTo(0.06) },
+      { key: "fish", p: expect.closeTo(0.04) },
+    ]);
+    expect(bars[2].partCount).toBe(2);
     expect(bars[3].p).toBeCloseTo(0.25); // "." + "ite" + ","
     expect(bars.reduce((s, b) => s + b.p, 0)).toBeCloseTo(1);
   });

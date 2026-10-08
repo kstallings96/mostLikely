@@ -23,6 +23,11 @@ const SENTENCE_END = /^[.!?…]+["'”’)\]]*$/;
 const EDGE_PUNCT = /^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu;
 const KID_WORD = /^[a-z0-9]+(?:['’-][a-z0-9]+)*$/;
 const REAL_ONE_LETTER = new Set(["a", "i", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]);
+// Two-letter tokens like " st", " ch", " al" are usually word starts.
+// These are the two-letter ones that are real words for kids.
+const REAL_TWO_LETTER = new Set(
+  "am an as at be by do go he hi if in is it me my no of oh ok on or ox so to tv up us we yo pa ma dr mr ms".split(" "),
+);
 
 /** GPT-2's end-of-text marker: the model thinks the passage is over. */
 export const EOS_TEXT = "<|endoftext|>";
@@ -41,6 +46,9 @@ export function normalizeToken(raw: string): NormalizedToken {
   if (!KID_WORD.test(stripped)) return { kind: "other" };
   // " p", " b"… are usually the start of a longer word, not a word.
   if (stripped.length === 1 && !REAL_ONE_LETTER.has(stripped)) return { kind: "other" };
+  if (stripped.length === 2 && /^[a-z]+$/.test(stripped) && !REAL_TWO_LETTER.has(stripped)) {
+    return { kind: "other" };
+  }
   return { kind: "word", word: stripped };
 }
 

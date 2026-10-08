@@ -8,7 +8,7 @@
  * browser keeps them in its cache.
  */
 import { env } from "@huggingface/transformers";
-import { decodeVocab, loadGpt2, nextTokenProbs, vocabSize, type LoadedModel } from "./core";
+import { decodeVocab, loadGpt2, nextTokenProbs, vocabSize, wordChance, type LoadedModel } from "./core";
 import type { WorkerRequest, WorkerResponse } from "./protocol";
 
 env.allowLocalModels = true;
@@ -44,11 +44,15 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
       if (!lm) throw new Error("Model not loaded");
       const probs = await nextTokenProbs(lm, msg.text);
       post({ type: "probs", id: msg.id, probs }, [probs.buffer]);
+    } else if (msg.type === "wordChance") {
+      if (!lm) throw new Error("Model not loaded");
+      const { p, pieces } = await wordChance(lm, msg.text, msg.word);
+      post({ type: "wordChance", id: msg.id, p, pieces });
     }
   } catch (err) {
     post({
       type: "error",
-      id: msg.type === "predict" ? msg.id : undefined,
+      id: msg.type === "load" ? undefined : msg.id,
       message: err instanceof Error ? err.message : String(err),
     });
   }

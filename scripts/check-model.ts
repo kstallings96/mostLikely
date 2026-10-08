@@ -11,7 +11,7 @@ import { env } from "@huggingface/transformers";
 import { GAME, PLURALS, allTargetWords } from "@/config/game";
 import { buildBlockedMask, makeBlockSet } from "@/lib/blocklist";
 import { buildVocabIndex, displayBars, mergeDistribution, probOf } from "@/lib/merge";
-import { decodeVocab, loadGpt2, nextTokenProbs, vocabSize } from "@/lib/model/core";
+import { decodeVocab, loadGpt2, nextTokenProbs, vocabSize, wordChance } from "@/lib/model/core";
 import { keyLabel } from "@/lib/normalize";
 import { countBy, cryptoRng, spin } from "@/lib/sample";
 import path from "node:path";
@@ -70,6 +70,13 @@ async function main() {
     console.log(`  10 spins: ${Object.entries(counts).map(([k, n]) => `${keyLabel(k)}×${n}`).join(", ")}\n`);
   }
 
+  // 3. Multi-piece guesses ("fido" is not one token)
+  for (const [s, w] of [["My dog's name is", "fido"], ["My dog's name is", "max"]] as const) {
+    const c = await wordChance(lm, s, w);
+    console.log(`Chance "${s} ${w}": ${pct(c.p)} via ${c.pieces.map((p) => JSON.stringify(p)).join(" + ")}`);
+  }
+  console.log();
+
   if (bad.length) {
     console.error(`NOT single tokens: ${bad.join(", ")} — the merge may miss them.`);
     process.exit(1);
@@ -78,7 +85,7 @@ async function main() {
 }
 
 function pct(p: number) {
-  return `${(p * 100).toFixed(1)}%`;
+  return `${(p * 100).toFixed(p < 0.001 ? 4 : 1)}%`;
 }
 
 main().catch((e) => {

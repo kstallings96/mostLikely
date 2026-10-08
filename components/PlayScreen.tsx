@@ -4,11 +4,12 @@ import { useState } from "react";
 import { GAME, PLURALS, ROUNDS } from "@/config/game";
 import { findBlockedWords, makeBlockSet } from "@/lib/blocklist";
 import { logEvent } from "@/lib/logger";
-import { topK, type MergedDist } from "@/lib/merge";
+import { guessOptions } from "@/lib/guess";
+import { probOf, topK, type MergedDist } from "@/lib/merge";
 import type { SpinnerModel } from "@/lib/model/client";
 import { OTHER_KEY } from "@/lib/normalize";
 import { countBy, cryptoRng, spin, type SpinResult } from "@/lib/sample";
-import { wordLabel } from "@/lib/format";
+import { chanceText, showToken, wordLabel } from "@/lib/format";
 import PeekPanel from "./PeekPanel";
 import { PredictWord, type Prediction } from "./Predict";
 import SpinBoard from "./SpinBoard";
@@ -62,7 +63,7 @@ export default function PlayScreen({ model, teamCode }: { model: SpinnerModel; t
       const d = await model.spinnerFor(text);
       setSentence(text);
       setDist(d);
-      setOptions(guessOptions(d));
+      setOptions(guessOptions(d, GAME.sandboxGuessOptions, cryptoRng));
       setPrediction(null);
       setPeek(false);
       anim.clear();
@@ -73,7 +74,20 @@ export default function PlayScreen({ model, teamCode }: { model: SpinnerModel; t
     }
   }
 
-  function pickPrediction(p: Prediction) {
+  async function pickPrediction(p: Prediction) {
+    // A typed guess: look up its chance, even if GPT-2 builds it from pieces.
+    if ("word" in p && p.custom && dist) {
+      const merged = probOf(dist, p.word);
+      if (merged > 0) p = { ...p, chance: merged };
+      else {
+        try {
+          const { p: chance, pieces } = await model.wordChance(sentence, p.word);
+          p = { ...p, chance, pieces };
+        } catch {
+          // Not critical: the summary just leaves the chance out.
+        }
+      }
+    }
     setPrediction(p);
     setStep("ready");
     if ("word" in p) logEvent({ round: round.id, event_type: "prediction", sentence, prediction: p });
@@ -107,7 +121,7 @@ export default function PlayScreen({ model, teamCode }: { model: SpinnerModel; t
       </header>
 
       <main className="grid min-h-0 flex-1 grid-cols-1 gap-4 p-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
-        {/* Left: sentence, guess, spin */}
+        {/* Left: sentence, guess, spin, peek */}
         <section className="flex min-h-0 flex-col gap-4">
           <p className="text-xl text-muted">{round.goal}</p>
 
@@ -164,7 +178,9 @@ export default function PlayScreen({ model, teamCode }: { model: SpinnerModel; t
 
           {(step === "ready" || step === "done") && (
             <div className="flex flex-col gap-3">
-              {step === "done" && anim.results && <SandboxSummary results={anim.results} prediction={prediction} />}
+              {step === "done" && anim.results && (
+                <SandboxSummary results={anim.results} prediction={prediction} />
+              )}
               <button
                 onClick={step === "ready" ? doSpin : () => setStep("predict")}
                 className="rounded-2xl bg-sun py-5 text-3xl font-bold text-ink shadow-[0_6px_0_#c98500] active:translate-y-1 active:shadow-none animate-pop"
@@ -173,25 +189,20 @@ export default function PlayScreen({ model, teamCode }: { model: SpinnerModel; t
               </button>
             </div>
           )}
-        </section>
-
-        {/* Right: live results and peek */}
-        <section className="flex min-h-0 flex-col gap-3">
-          <div className="min-h-0 flex-[3] rounded-3xl border-4 border-line bg-card p-4">
-            <SpinBoard results={anim.results} revealed={anim.revealed} spins={round.spins} onSkip={anim.skip} />
-          </div>
           {dist && step !== "write" && (
-            <div className={`min-h-0 rounded-3xl border-4 border-line bg-card p-4 ${peek ? "flex-[2]" : ""}`}>
+            <div className={`min-h-0 rounded-3xl border-4 border-line bg-card p-4 ${peek ? "flex-1" : ""}`}>
               {peek ? (
-                <div className="flex h-full flex-col gap-2">
-                  <PeekPanel
-                    dist={dist}
-                    xray={xray}
-                    onToggleXray={() => {
-                      logEvent({ round: round.id, event_type: "xray_toggle", sentence });
-                      setXray(!xray);
-                    }}
-                  />
+                <div className="flex h-full min-h-0 flex-col gap-1">
+                  <div className="min-h-0 flex-1">
+                    <PeekPanel
+                      dist={dist}
+                      xray={xray}
+                      onToggleXray={() => {
+                        logEvent({ round: round.id, event_type: "xray_toggle", sentence });
+                        setXray(!xray);
+                      }}
+                    />
+                  </div>
                   <button onClick={togglePeek} className="self-end text-lg text-muted underline">
                     Hide
                   </button>
@@ -207,6 +218,13 @@ export default function PlayScreen({ model, teamCode }: { model: SpinnerModel; t
               )}
             </div>
           )}
+        </section>
+
+        {/* Right: live results */}
+        <section className="flex min-h-0 flex-col gap-3">
+          <div className="min-h-0 flex-1 rounded-3xl border-4 border-line bg-card p-4">
+            <SpinBoard results={anim.results} revealed={anim.revealed} spins={round.spins} onSkip={anim.skip} />
+          </div>
         </section>
       </main>
     </div>
@@ -224,6 +242,21 @@ function SandboxSummary({ results, prediction }: { results: SpinResult[]; predic
       <p className="text-2xl animate-pop">
         {prediction.word === topWord ? "🎯 " : "👍 "}You picked <b>{wordLabel(prediction.word)}</b>. It came up{" "}
         <b>{n}</b> {n === 1 ? "time" : "times"}!
+        {prediction.custom && prediction.chance !== undefined && (
+          <span className="mt-1 block text-xl text-muted">
+            Its chance each spin: <b>{chanceText(prediction.chance)}</b>
+            {prediction.pieces && prediction.pieces.length > 1 && (
+              <span className="block text-lg">
+                The AI builds “{prediction.word}” from {prediction.pieces.length} pieces:{" "}
+                {prediction.pieces.map((piece, i) => (
+                  <code key={i} className="mx-0.5 rounded bg-ink/5 px-1.5">
+                    {showToken(piece)}
+                  </code>
+                ))}
+              </span>
+            )}
+          </span>
+        )}
       </p>
     );
   }
@@ -232,18 +265,4 @@ function SandboxSummary({ results, prediction }: { results: SpinResult[]; predic
       The spinner liked <b>{wordLabel(topWord)}</b> most this time.
     </p>
   );
-}
-
-/** Four words to guess from: the top three plus one long shot, shuffled. */
-function guessOptions(dist: MergedDist): string[] {
-  const words = dist.entries.filter((e) => e.key !== OTHER_KEY).map((e) => e.key);
-  const top = words.slice(0, 3);
-  const longShots = words.slice(3, 8);
-  const extra = longShots[Math.floor(cryptoRng() * longShots.length)];
-  const picks = extra ? [...top, extra] : top;
-  for (let i = picks.length - 1; i > 0; i--) {
-    const j = Math.floor(cryptoRng() * (i + 1));
-    [picks[i], picks[j]] = [picks[j], picks[i]];
-  }
-  return picks.slice(0, GAME.sandboxGuessOptions);
 }

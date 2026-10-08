@@ -26,6 +26,13 @@ describe("normalizeToken", () => {
     expect(normalizeToken(" a")).toEqual({ kind: "word", word: "a" });
     expect(normalizeToken(" 7")).toEqual({ kind: "word", word: "7" });
   });
+  it("treats two-letter scraps as fragments, but keeps real two-letter words", () => {
+    for (const t of [" st", " ch", " al", " Ch"]) expect(normalizeToken(t).kind).toBe("other");
+    for (const w of ["is", "my", "ox", "go", "tv"]) {
+      expect(normalizeToken(" " + w)).toEqual({ kind: "word", word: w });
+    }
+    expect(normalizeToken(" 10")).toEqual({ kind: "word", word: "10" });
+  });
   it("labels the leftover buckets so they can't be confused with real words", () => {
     expect(keyLabel(OTHER_KEY)).not.toBe(keyLabel(tokenKey(" other", PLURALS)));
   });
@@ -51,5 +58,18 @@ describe("tokenKey", () => {
 describe("wordsOf", () => {
   it("splits, lowercases, and strips punctuation", () => {
     expect(wordsOf("  My DOG, is   big! ")).toEqual(["my", "dog", "is", "big"]);
+  });
+});
+
+describe("chanceText", async () => {
+  const { chanceText } = await import("@/lib/format");
+  it("uses percent at 1% and above", () => {
+    expect(chanceText(0.42)).toBe("42%");
+    expect(chanceText(0.01)).toBe("1%");
+  });
+  it("uses '1 in N' with two significant digits below 1%", () => {
+    expect(chanceText(0.005)).toBe("about 1 in 200");
+    expect(chanceText(1 / 4321)).toBe("about 1 in 4,300");
+    expect(chanceText(0)).toBe("almost zero");
   });
 });

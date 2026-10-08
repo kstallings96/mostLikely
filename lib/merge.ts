@@ -40,6 +40,9 @@ export interface MergedEntry {
   tokens: XrayToken[];
   /** How many raw tokens fed into this entry. */
   tokenCount: number;
+  /** Leftover bars only: the biggest entries folded in, and how many in all. */
+  parts?: { key: string; p: number }[];
+  partCount?: number;
 }
 
 export interface MergedDist {
@@ -110,10 +113,15 @@ export function displayBars(dist: MergedDist, n: number, xrayTokensPerBar = 8): 
   return [...shown, ...leftovers.filter((b) => b.p > 0)];
 }
 
+/** How many folded-in entries a leftover bar keeps for drawing slices. */
+const MAX_PARTS = 60;
+
 function combine(key: string, entries: MergedEntry[], xrayTokensPerBar: number): MergedEntry {
   return {
     key,
     p: entries.reduce((s, e) => s + e.p, 0),
+    parts: entries.slice(0, MAX_PARTS).map((e) => ({ key: e.key, p: e.p })),
+    partCount: entries.length,
     tokenCount: entries.reduce((s, e) => s + e.tokenCount, 0),
     tokens: entries
       .flatMap((e) => e.tokens)

@@ -9,6 +9,7 @@
 import {
   AutoModelForCausalLM,
   AutoTokenizer,
+  Tensor,
   type PreTrainedModel,
   type PreTrainedTokenizer,
   type ProgressCallback,
@@ -80,12 +81,15 @@ export function prepareText(text: string): string {
 }
 
 /** Softmax over the logits at the last position: P(next token | text). */
-export async function nextTokenProbs(
-  { tokenizer, model }: LoadedModel,
-  text: string,
-): Promise<Float32Array> {
-  const inputs = tokenizer(prepareText(text));
-  const { logits } = await model(inputs);
+export async function nextTokenProbs(lm: LoadedModel, text: string): Promise<Float32Array> {
+  return probsAfterIds(lm, lm.tokenizer.encode(prepareText(text)));
+}
+
+/** P(next token | these token ids). */
+async function probsAfterIds({ model }: LoadedModel, ids: number[]): Promise<Float32Array> {
+  const input_ids = new Tensor("int64", BigInt64Array.from(ids.map(BigInt)), [1, ids.length]);
+  const attention_mask = new Tensor("int64", new BigInt64Array(ids.length).fill(BigInt(1)), [1, ids.length]);
+  const { logits } = await model({ input_ids, attention_mask });
   const [, seqLen, vocab] = logits.dims as number[];
   const data = logits.data as ArrayLike<number>;
   const off = (seqLen - 1) * vocab;
@@ -102,4 +106,39 @@ export async function nextTokenProbs(
   for (let i = 0; i < vocab; i++) probs[i] /= sum;
   logits.dispose?.();
   return probs;
+}
+
+export interface WordChance {
+  /** Chance the next word is `word` (lowercase + Capitalized spellings). */
+  p: number;
+  /** The token pieces GPT-2 uses for the most likely spelling, e.g. [" F", "ido"]. */
+  pieces: string[];
+}
+
+/**
+ * Chance that the next word is `word`, even when GPT-2 builds it from
+ * several pieces: P(" F") × P("ido" | … " F"). Sums the lowercase and
+ * Capitalized spellings. (The spinner only draws one piece at a time, so a
+ * multi-piece word can't come up as one spin; this tells kids how likely it
+ * would be if the AI kept going.)
+ */
+export async function wordChance(lm: LoadedModel, text: string, word: string): Promise<WordChance> {
+  const base = lm.tokenizer.encode(prepareText(text));
+  const spellings = [...new Set([word.toLowerCase(), word[0].toUpperCase() + word.slice(1).toLowerCase()])];
+  let total = 0;
+  let best = { p: -1, pieces: [] as string[] };
+  for (const spelling of spellings) {
+    const pieceIds = lm.tokenizer.encode(" " + spelling, { add_special_tokens: false });
+    let p = 1;
+    const ids = [...base];
+    for (const id of pieceIds) {
+      p *= (await probsAfterIds(lm, ids))[id];
+      ids.push(id);
+    }
+    total += p;
+    if (p > best.p) {
+      best = { p, pieces: pieceIds.map((id) => lm.tokenizer.decode([id], { clean_up_tokenization_spaces: false })) };
+    }
+  }
+  return { p: total, pieces: best.pieces };
 }
