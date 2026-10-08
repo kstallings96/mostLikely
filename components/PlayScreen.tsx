@@ -19,7 +19,7 @@ const SANDBOX = ROUNDS[0];
 
 type Step = "write" | "predict" | "ready" | "spinning" | "done";
 
-export default function PlayScreen({ model, teamCode }: { model: SpinnerBackend; teamCode: string }) {
+export default function PlayScreen({ model, player }: { model: SpinnerBackend; player: string }) {
   const round = SANDBOX;
   const [draft, setDraft] = useState("");
   const [sentence, setSentence] = useState("");
@@ -42,7 +42,12 @@ export default function PlayScreen({ model, teamCode }: { model: SpinnerBackend;
       distribution: view ? topWords(view, 10) : null,
       prediction: prediction && "word" in prediction ? prediction : null,
       spin_results: {
-        spins: results.map((r) => ({ word: r.key, token: r.text, ...(r.pieces && { pieces: r.pieces }) })),
+        spins: results.map((r) => ({
+          word: r.key,
+          token: r.text,
+          p: Math.round(r.p * 1e6) / 1e6,
+          ...(r.pieces && { pieces: r.pieces }),
+        })),
         counts: countBy(results),
         skipped_animation: skipped,
       },
@@ -70,8 +75,9 @@ export default function PlayScreen({ model, teamCode }: { model: SpinnerBackend;
       anim.clear();
       setStep("predict");
       logEvent({ round: round.id, event_type: "sentence_submitted", sentence: text, distribution: topWords(v, 10) });
-    } catch {
+    } catch (err) {
       setHiccup(true);
+      logEvent({ round: round.id, event_type: "error", sentence: text, detail: { where: "view", message: String(err) } });
     } finally {
       setThinking(false);
     }
@@ -102,9 +108,10 @@ export default function PlayScreen({ model, teamCode }: { model: SpinnerBackend;
     setStep("spinning");
     try {
       anim.start(await model.spin(view, round.spins));
-    } catch {
+    } catch (err) {
       setHiccup(true);
       setStep("ready");
+      logEvent({ round: round.id, event_type: "error", sentence, detail: { where: "spin", message: String(err) } });
     }
   }
 
@@ -126,7 +133,7 @@ export default function PlayScreen({ model, teamCode }: { model: SpinnerBackend;
         <span className="rounded-full bg-brand-soft px-3 py-1 text-lg font-bold">
           {round.icon} {round.title}
         </span>
-        <span className="ml-auto text-lg text-muted">Team: {teamCode}</span>
+        <span className="ml-auto text-lg text-muted">👋 {player}</span>
       </header>
 
       <main className="grid min-h-0 flex-1 grid-cols-1 gap-4 p-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
@@ -209,7 +216,7 @@ export default function PlayScreen({ model, teamCode }: { model: SpinnerBackend;
                       bars={view.bars}
                       xray={xray}
                       onToggleXray={() => {
-                        logEvent({ round: round.id, event_type: "xray_toggle", sentence });
+                        logEvent({ round: round.id, event_type: "xray_toggle", sentence, detail: { on: !xray } });
                         setXray(!xray);
                       }}
                     />

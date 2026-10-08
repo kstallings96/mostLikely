@@ -31,10 +31,16 @@ export function spokenText(key: string, tokenText: string): string {
   return key;
 }
 
-export function sanitizeTeamCode(raw: string): string {
+/** Letters, spaces, hyphens and apostrophes only ("Mary-Kate", "D'Andre"). */
+export function sanitizeFirstName(raw: string): string {
   return raw
-    .replace(/[^\p{L}\p{N} \-]/gu, "")
+    .replace(/[^\p{L} '’\-]/gu, "")
     .replace(/\s+/g, " ")
     .trimStart()
-    .slice(0, 24);
+    .slice(0, 20);
+}
+
+/** One letter, uppercase. */
+export function sanitizeInitial(raw: string): string {
+  return (raw.match(/\p{L}/u)?.[0] ?? "").toUpperCase();
 }

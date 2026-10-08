@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { sanitizeTeamCode } from "@/lib/format";
+import { sanitizeFirstName, sanitizeInitial } from "@/lib/format";
 import type { ModelState } from "@/lib/useSpinnerModel";
 import Wheel from "./Wheel";
 
@@ -10,10 +10,11 @@ export default function StartScreen({
   onStart,
 }: {
   modelState: ModelState | null;
-  onStart: (teamCode: string) => void;
+  onStart: (firstName: string, lastInitial: string) => void;
 }) {
-  const [code, setCode] = useState("");
-  const clean = code.trim();
+  const [first, setFirst] = useState("");
+  const [initial, setInitial] = useState("");
+  const ready = first.trim().length > 0 && initial.length === 1;
 
   return (
     <main className="flex flex-1 flex-col items-center justify-center gap-8 p-6 text-center">
@@ -27,25 +28,36 @@ export default function StartScreen({
         className="flex w-full max-w-md flex-col gap-4"
         onSubmit={(e) => {
           e.preventDefault();
-          if (clean) onStart(clean);
+          if (ready) onStart(first.trim(), initial);
         }}
       >
-        <label className="text-left text-xl font-bold" htmlFor="team">
-          Team name
-        </label>
-        <input
-          id="team"
-          autoFocus
-          autoComplete="off"
-          value={code}
-          onChange={(e) => setCode(sanitizeTeamCode(e.target.value))}
-          placeholder="Table 3"
-          className="rounded-2xl border-4 border-line bg-card px-5 py-4 text-3xl outline-none focus:border-brand"
-        />
-        <p className="text-left text-lg text-muted">🙈 No real names, please.</p>
+        <div className="flex gap-3">
+          <label className="flex flex-1 flex-col gap-1 text-left text-xl font-bold">
+            First name
+            <input
+              id="first-name"
+              autoFocus
+              autoComplete="off"
+              value={first}
+              onChange={(e) => setFirst(sanitizeFirstName(e.target.value))}
+              className="rounded-2xl border-4 border-line bg-card px-5 py-4 text-3xl font-normal outline-none focus:border-brand"
+            />
+          </label>
+          <label className="flex w-36 flex-col gap-1 text-left text-xl font-bold">
+            Last initial
+            <input
+              id="last-initial"
+              autoComplete="off"
+              value={initial}
+              maxLength={1}
+              onChange={(e) => setInitial(sanitizeInitial(e.target.value))}
+              className="rounded-2xl border-4 border-line bg-card px-5 py-4 text-center text-3xl font-normal outline-none focus:border-brand"
+            />
+          </label>
+        </div>
         <button
           type="submit"
-          disabled={!clean}
+          disabled={!ready}
           className="rounded-2xl bg-brand px-6 py-5 text-3xl font-bold text-white shadow-[0_6px_0_#3d2790] transition active:translate-y-1 active:shadow-none disabled:opacity-40"
         >
           Start ▶
