@@ -3,6 +3,7 @@
 import { pct, showToken, wordLabel } from "@/lib/format";
 import type { MergedEntry } from "@/lib/merge";
 import { OTHER_KEY, OTHER_WORDS_KEY } from "@/lib/normalize";
+import { colorFor } from "@/lib/wheel";
 
 /** The spinner's chances for this sentence. A peek, not the score. */
 export default function PeekPanel({
@@ -38,7 +39,7 @@ export default function PeekPanel({
           return (
             <li key={b.key} className="flex flex-col">
               <div className="flex items-center gap-2">
-                <span className={`w-36 shrink-0 text-lg leading-tight break-words ${target ? "font-bold text-mint" : ""}`}>
+                <span className={`w-36 shrink-0 text-lg leading-tight break-words ${target ? "font-bold underline decoration-4 decoration-mint" : ""}`}>
                   {wordLabel(b.key)}
                 </span>
                 <div className="flex h-6 flex-1 overflow-hidden rounded-md bg-line/60">
@@ -49,7 +50,8 @@ export default function PeekPanel({
                       className="h-full rounded-md"
                       style={{
                         width: `${Math.max(1, (b.p / max) * 100)}%`,
-                        background: target ? "#12a37f" : b.key === OTHER_KEY ? "#9aa1ad" : "#5b3cc4",
+                        // Same color as this word's slice on the spinner and its column in the graph.
+                        background: colorFor(b.key, bars),
                       }}
                     />
                   )}

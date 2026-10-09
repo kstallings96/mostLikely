@@ -85,8 +85,15 @@ export async function nextTokenProbs(lm: LoadedModel, text: string): Promise<Flo
   return probsAfterIds(lm, encodeText(lm, text));
 }
 
+/**
+ * GPT-2's <|endoftext|> token. Training text was separated by it, so putting
+ * it first tells the model "a new text starts here". Without it, sentence
+ * openings get muddled guesses ("Once upon a" → "time" 18%; with it, 99%).
+ */
+export const GPT2_START = 50256;
+
 export function encodeText(lm: LoadedModel, text: string): number[] {
-  return lm.tokenizer.encode(prepareText(text));
+  return [GPT2_START, ...lm.tokenizer.encode(prepareText(text))];
 }
 
 /** P(next token | these token ids). */

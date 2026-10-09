@@ -30,10 +30,16 @@ export const GAME = {
   displayBars: 8,
   /** Raw tokens listed under each bar in X-ray mode. */
   xrayTokensPerBar: 8,
+  /** Tutorial: how long the first slow-motion spin takes (ms); later ones speed up. */
+  tutorialFirstSpinMs: 2400,
+  /** Tutorial: the fastest a slow-motion spin gets (ms). */
+  tutorialFastestSpinMs: 600,
   /** Words to offer as guesses in the Sandbox prediction step. */
   sandboxGuessOptions: 4,
   /** Spin sets in the Sandbox before the "Ready for a challenge?" button shows. */
   sandboxSetsBeforeNext: 2,
+  /** Missed tries in a round before its hint shows. */
+  missesBeforeHint: 2,
 };
 
 /**
@@ -49,7 +55,7 @@ export const PLURALS: Record<string, string> = {
   mice: "mouse",
 };
 
-export type RoundKind = "sandbox" | "atLeast" | "switch" | "perfect" | "balance";
+export type RoundKind = "tutorial" | "sandbox" | "atLeast" | "switch" | "balance";
 
 export interface RoundConfig {
   id: string;
@@ -66,18 +72,37 @@ export interface RoundConfig {
   spins: number;
   /** Number of spin sets allowed (null = unlimited). */
   budget: number | null;
-  /** Pass if target count ≥ this (atLeast / switch / perfect). */
+  /** Pass if target count ≥ this (atLeast / switch). */
   min?: number;
   /** balance: each target must land in [eachMin, eachMax]. */
   eachMin?: number;
   eachMax?: number;
-  /** perfect: after passing, do one big run of this many spins. */
-  bigSpins?: number;
+  /** Start with the sentence from this round already typed in. */
+  startFrom?: string;
+  /** A tip shown after a few missed tries (grade-4 wording). */
+  hint?: string;
+  /** tutorial: the ready-made sentences to spin in slow motion. */
+  sentences?: string[];
   /** Optional rounds are shown as "Bonus". */
   bonus?: boolean;
+  /** Set false to leave a round out of the activity. */
+  enabled?: boolean;
 }
 
 export const ROUNDS: RoundConfig[] = [
+  {
+    id: "tutorial",
+    kind: "tutorial",
+    title: "How it works",
+    icon: "🔍",
+    goal: "Watch the AI pick the next word.",
+    targets: [],
+    spins: 10,
+    budget: null,
+    // Likely-but-not-certain (teeth 87%), middling (jelly 30%), spread out.
+    // Not dog or cat sentences, so the tutorial doesn't give away answers.
+    sentences: ["I brush my", "Peanut butter and", "My favorite color is"],
+  },
   {
     id: "sandbox",
     kind: "sandbox",
@@ -93,11 +118,12 @@ export const ROUNDS: RoundConfig[] = [
     kind: "atLeast",
     title: "Dog Trainer",
     icon: "🐶",
-    goal: "Get “dog” 7 or more times out of 10.",
+    goal: "Get “dog” 5 or more times out of 10.",
     targets: ["dog"],
     spins: 10,
     budget: 5,
-    min: 7,
+    min: 5,
+    hint: "The AI copies phrases people say a lot. What words often come right before “dog”?",
   },
   {
     id: "switcheroo",
@@ -108,19 +134,35 @@ export const ROUNDS: RoundConfig[] = [
     targets: ["cat"],
     spins: 10,
     budget: 5,
-    min: 6,
+    min: 5,
+    startFrom: "dog-trainer",
+    hint: "Think of a phrase that often ends with “cat”.",
   },
   {
-    id: "perfect-10",
-    kind: "perfect",
-    title: "Perfect 10",
-    icon: "💯",
-    goal: "Get “dog” 10 out of 10. Then try 50!",
+    id: "big-spin",
+    kind: "atLeast",
+    title: "Big Spin",
+    icon: "🚀",
+    goal: "Get “dog” 25 or more times out of 50.",
     targets: ["dog"],
-    spins: 10,
-    budget: 5,
-    min: 10,
-    bigSpins: 50,
+    spins: 50,
+    budget: 3,
+    min: 25,
+    startFrom: "dog-trainer",
+    hint: "More spins means less luck. Make “dog” the biggest slice you can.",
+  },
+  {
+    id: "mega-spin",
+    kind: "atLeast",
+    title: "Mega Spin",
+    icon: "🌟",
+    goal: "Get “dog” 50 or more times out of 100.",
+    targets: ["dog"],
+    spins: 100,
+    budget: 3,
+    min: 50,
+    startFrom: "big-spin",
+    hint: "More spins means less luck. Make “dog” the biggest slice you can.",
   },
   {
     id: "coin-flip",
@@ -134,8 +176,12 @@ export const ROUNDS: RoundConfig[] = [
     eachMin: 7,
     eachMax: 13,
     bonus: true,
+    enabled: false, // turned off: too hard for a first session
   },
 ];
+
+/** The rounds kids actually play, in order. */
+export const ACTIVE_ROUNDS = ROUNDS.filter((r) => r.enabled !== false);
 
 /** Every word the game depends on (used by the tokenizer check). */
 export function allTargetWords(): string[] {

@@ -5,10 +5,10 @@ import { PLURALS } from "@/config/game";
 import { findBlockedWords, makeBlockSet } from "@/lib/blocklist";
 import { wordLabel } from "@/lib/format";
 import { toKidWord, wordsOf } from "@/lib/normalize";
+import { guessStep } from "@/lib/rounds";
 
 export type Prediction =
-  | { word: string; count?: number; custom?: boolean; chance?: number; pieces?: string[] }
-  | { skipped: true };
+  { word: string; count?: number; custom?: boolean; chance?: number; pieces?: string[] } | { skipped: true };
 
 const blockSet = makeBlockSet();
 
@@ -16,13 +16,7 @@ const blockSet = makeBlockSet();
  * "Which word will win?" — tap a word, or type your own ("fido").
  * No wrong answers.
  */
-export function PredictWord({
-  options,
-  onPick,
-}: {
-  options: string[];
-  onPick: (p: Prediction) => void;
-}) {
+export function PredictWord({ options, onPick }: { options: string[]; onPick: (p: Prediction) => void }) {
   const [own, setOwn] = useState("");
   const [blocked, setBlocked] = useState(false);
 
@@ -84,7 +78,10 @@ export function PredictWord({
   );
 }
 
-/** "How many 'dog' out of 10?" — tap a number. */
+/**
+ * "How many 'dog' out of 10?" — tap a number. Big sets offer round
+ * numbers ("About how many out of 100?": 0, 10, 20 …).
+ */
 export function PredictCount({
   word,
   spins,
@@ -94,13 +91,15 @@ export function PredictCount({
   spins: number;
   onPick: (p: Prediction) => void;
 }) {
+  const step = guessStep(spins);
+  const choices = Array.from({ length: spins / step + 1 }, (_, i) => i * step);
   return (
     <div className="flex flex-col gap-3 animate-pop">
       <p className="text-2xl font-bold">
-        🤔 How many <span className="text-brand">“{word}”</span> out of {spins}?
+        🤔 {step > 1 ? "About how" : "How"} many <span className="text-brand">“{word}”</span> out of {spins}?
       </p>
-      <div className={`grid gap-2 ${spins > 10 ? "grid-cols-7" : "grid-cols-6"}`}>
-        {Array.from({ length: spins + 1 }, (_, n) => (
+      <div className="grid grid-cols-6 gap-2">
+        {choices.map((n) => (
           <button
             key={n}
             onClick={() => onPick({ word, count: n })}

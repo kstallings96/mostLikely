@@ -1,21 +1,26 @@
 "use client";
 
 import { useState } from "react";
-import { ROUNDS } from "@/config/game";
+import { ACTIVE_ROUNDS as ROUNDS } from "@/config/game";
 import { logEvent } from "@/lib/logger";
 import type { SpinnerBackend } from "@/lib/spinner/types";
 import EndScreen from "./EndScreen";
 import RoundScreen, { type RoundResult } from "./RoundScreen";
+import Tutorial from "./Tutorial";
 
 /**
- * The activity: Sandbox → Dog Trainer → Switcheroo → Perfect 10 → Coin Flip
- * (bonus) → the end. Add `?round=<id>` to the URL to start at a round (for
+ * The activity, in config/game.ts order (rounds with enabled: false are left
+ * out): How it works → Play → Dog Trainer → Switcheroo → Big Spin →
+ * Mega Spin → the end. Add `?round=<id>` to the URL to start at a round (for
  * testing or a teacher demo).
  */
 export default function Game({ model, player }: { model: SpinnerBackend; player: string }) {
   const [index, setIndex] = useState(() => {
     const id = new URLSearchParams(window.location.search).get("round");
-    return Math.max(0, ROUNDS.findIndex((r) => r.id === id));
+    return Math.max(
+      0,
+      ROUNDS.findIndex((r) => r.id === id),
+    );
   });
   const [results, setResults] = useState<Record<string, RoundResult>>({});
   // Each visit to a round gets a fresh screen (e.g. Keep playing → Sandbox).
@@ -24,7 +29,7 @@ export default function Game({ model, player }: { model: SpinnerBackend; player:
   const round = ROUNDS[index];
 
   function finish(result: RoundResult) {
-    if (round.kind !== "sandbox") {
+    if (round.kind !== "sandbox" && round.kind !== "tutorial") {
       logEvent({
         round: round.id,
         event_type: "round_complete",
@@ -34,7 +39,6 @@ export default function Game({ model, player }: { model: SpinnerBackend; player:
           passed: result.passed,
           lucky: result.lucky,
           sets_used: result.setsUsed,
-          ...(result.bigRun && { big_run: result.bigRun }),
         },
       });
     }
@@ -75,17 +79,30 @@ export default function Game({ model, player }: { model: SpinnerBackend; player:
       {done ? (
         <EndScreen
           results={results}
-          onKeepPlaying={() => goTo(0)}
+          onKeepPlaying={() => goTo(Math.max(0, ROUNDS.findIndex((r) => r.kind === "sandbox")))}
+        />
+      ) : round.kind === "tutorial" ? (
+        <Tutorial
+          key={`${round.id}-${visit}`}
+          model={model}
+          round={round}
+          onDone={() => finish({ roundId: round.id, passed: true, lucky: false, setsUsed: 0, sentence: null })}
         />
       ) : (
         <RoundScreen
           key={`${round.id}-${visit}`}
           model={model}
           round={round}
-          startSentence={round.kind === "switch" ? (results["dog-trainer"]?.sentence ?? undefined) : undefined}
+          startSentence={startSentenceFor(round.startFrom, results)}
           onDone={finish}
         />
       )}
     </div>
   );
+}
+
+/** The sentence to start from: the named round's passing (or last) sentence. */
+function startSentenceFor(from: string | undefined, results: Record<string, RoundResult>): string | undefined {
+  if (!from) return undefined;
+  return results[from]?.sentence ?? undefined;
 }

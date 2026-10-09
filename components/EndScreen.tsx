@@ -1,6 +1,6 @@
 "use client";
 
-import { ROUNDS } from "@/config/game";
+import { ACTIVE_ROUNDS } from "@/config/game";
 import type { RoundResult } from "./RoundScreen";
 
 /** The wrap-up: what each round showed, and the one big idea. */
@@ -11,7 +11,7 @@ export default function EndScreen({
   results: Record<string, RoundResult>;
   onKeepPlaying: () => void;
 }) {
-  const scored = ROUNDS.filter((r) => r.kind !== "sandbox");
+  const scored = ACTIVE_ROUNDS.filter((r) => r.kind !== "sandbox" && r.kind !== "tutorial");
   return (
     <main className="flex flex-1 items-center justify-center overflow-y-auto p-6">
       <div className="flex w-full max-w-3xl animate-pop flex-col gap-6 rounded-3xl border-4 border-line bg-card p-8">
@@ -53,6 +53,5 @@ function resultText(id: string, res: RoundResult | undefined): string {
   if (id === "switcheroo" && res.wordsChanged !== undefined) {
     parts.push(`${res.wordsChanged} ${res.wordsChanged === 1 ? "word" : "words"} changed`);
   }
-  if (res.bigRun) parts.push(`${res.bigRun.count} of ${res.bigRun.total} in the big spin`);
   return parts.join(" · ");
 }

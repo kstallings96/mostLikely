@@ -8,7 +8,7 @@ import { chanceText, showToken, wordLabel } from "@/lib/format";
 import { guessOptions } from "@/lib/guess";
 import { logEvent } from "@/lib/logger";
 import { OTHER_KEY } from "@/lib/normalize";
-import { judge, luck, outOfTen, passChance, type Luck, type Outcome } from "@/lib/rounds";
+import { guessStep, judge, luck, outOfTen, passChance, type Luck, type Outcome } from "@/lib/rounds";
 import { countBy, cryptoRng, type SpinResult } from "@/lib/sample";
 import { chanceOf, topWords, type SpinnerBackend, type SpinnerView } from "@/lib/spinner/types";
 import PeekPanel from "./PeekPanel";
@@ -27,8 +27,6 @@ export interface RoundResult {
   sentence: string | null;
   /** Switcheroo: fewest words changed in a passing sentence. */
   wordsChanged?: number;
-  /** Perfect 10: the big run, e.g. {count: 47, total: 50}. */
-  bigRun?: { count: number; total: number };
 }
 
 type Step = "write" | "predict" | "ready" | "spinning" | "done";
@@ -46,8 +44,9 @@ export default function RoundScreen({
   onDone,
 }: {
   model: SpinnerBackend;
+  /** Any round except the tutorial. */
   round: RoundConfig;
-  /** Switcheroo starts from the Dog Trainer sentence. */
+  /** Typed in at the start (from round.startFrom), e.g. the Dog Trainer sentence. */
   startSentence?: string;
   onDone: (result: RoundResult) => void;
 }) {
@@ -55,7 +54,7 @@ export default function RoundScreen({
   const target = round.targets[0];
 
   const [intro, setIntro] = useState(scored);
-  const [draft, setDraft] = useState(round.kind === "switch" ? (startSentence ?? "") : "");
+  const [draft, setDraft] = useState(startSentence ?? "");
   const [sentence, setSentence] = useState("");
   const [view, setView] = useState<SpinnerView | null>(null);
   const [options, setOptions] = useState<string[]>([]);
@@ -68,37 +67,20 @@ export default function RoundScreen({
   const [xray, setXray] = useState(false);
 
   const [setsUsed, setSetsUsed] = useState(0);
+  const [misses, setMisses] = useState(0);
   const [lastSet, setLastSet] = useState<SetResult | null>(null);
   const [passed, setPassed] = useState(false);
   const [lucky, setLucky] = useState(false);
   const [passSentence, setPassSentence] = useState<string | null>(null);
   const [bestWords, setBestWords] = useState<number | undefined>(undefined);
-  const [bigMode, setBigMode] = useState(false);
-  const [bigRun, setBigRun] = useState<{ count: number; total: number } | undefined>(undefined);
 
   const budgetLeft = round.budget === null ? Infinity : round.budget - setsUsed;
   const roundOver = scored && (passed || budgetLeft <= 0);
-  const spinsThisSet = bigMode ? round.bigSpins! : round.spins;
+  const showHint = scored && !passed && !!round.hint && misses >= GAME.missesBeforeHint;
 
   const anim = useSpinAnimation((results, skipped) => {
     setStep("done");
     const counts = countBy(results);
-    const spinLog = {
-      spins: results.map((r) => ({
-        word: r.key,
-        token: r.text,
-        p: Math.round(r.p * 1e6) / 1e6,
-        ...(r.pieces && { pieces: r.pieces }),
-      })),
-      counts,
-      skipped_animation: skipped,
-    };
-    if (bigMode) {
-      const run = { count: counts[target] ?? 0, total: results.length };
-      setBigRun(run);
-      logEvent({ round: round.id, event_type: "spin_set", sentence, spin_results: spinLog, detail: { big_run: true, ...run } });
-      return;
-    }
     let detail: Record<string, unknown> = { set: setsUsed };
     if (scored && view) {
       const outcome = judge(round, counts);
@@ -113,6 +95,11 @@ export default function RoundScreen({
           const n = wordEditDistance(startSentence, sentence);
           setBestWords((b) => (b === undefined ? n : Math.min(b, n)));
         }
+      } else {
+        setMisses((m) => m + 1);
+        if (misses + 1 === GAME.missesBeforeHint && round.hint) {
+          logEvent({ round: round.id, event_type: "hint_shown", sentence, detail: { hint: round.hint } });
+        }
       }
       detail = { ...detail, target_counts: outcome.targetCounts, passed: outcome.passed, pass_chance: chance, luck: l };
     }
@@ -122,7 +109,16 @@ export default function RoundScreen({
       sentence,
       distribution: view ? topWords(view, 10) : null,
       prediction: prediction && "word" in prediction ? prediction : null,
-      spin_results: spinLog,
+      spin_results: {
+        spins: results.map((r) => ({
+          word: r.key,
+          token: r.text,
+          p: Math.round(r.p * 1e6) / 1e6,
+          ...(r.pieces && { pieces: r.pieces }),
+        })),
+        counts,
+        skipped_animation: skipped,
+      },
       detail,
     });
   });
@@ -153,13 +149,18 @@ export default function RoundScreen({
         event_type: "sentence_submitted",
         sentence: text,
         distribution: topWords(v, 10),
-        ...(round.kind === "switch" && startSentence && {
+        ...(startSentence && {
           detail: { words_from_start: wordEditDistance(startSentence, text), start_sentence: startSentence },
         }),
       });
     } catch (err) {
       setHiccup(true);
-      logEvent({ round: round.id, event_type: "error", sentence: text, detail: { where: "view", message: String(err) } });
+      logEvent({
+        round: round.id,
+        event_type: "error",
+        sentence: text,
+        detail: { where: "view", message: String(err) },
+      });
     } finally {
       setThinking(false);
     }
@@ -184,24 +185,24 @@ export default function RoundScreen({
     if ("word" in p) logEvent({ round: round.id, event_type: "prediction", sentence, prediction: p });
   }
 
-  async function doSpin(big = false) {
+  async function doSpin() {
     if (!view) return;
     setHiccup(false);
-    setBigMode(big);
-    if (!big) setSetsUsed((n) => n + 1);
+    setSetsUsed((n) => n + 1);
     setStep("spinning");
     try {
-      anim.start(await model.spin(view, big ? round.bigSpins! : round.spins));
+      anim.start(await model.spin(view, round.spins));
     } catch (err) {
       setHiccup(true);
       setStep("ready");
-      if (!big) setSetsUsed((n) => n - 1); // a hiccup doesn't cost a spin set
+      setSetsUsed((n) => n - 1); // a hiccup doesn't cost a try
       logEvent({ round: round.id, event_type: "error", sentence, detail: { where: "spin", message: String(err) } });
     }
   }
 
   function editSentence() {
     setStep("write");
+    setDraft(sentence);
     setPeek(false);
     setLastSet(null);
     anim.clear();
@@ -220,7 +221,6 @@ export default function RoundScreen({
       setsUsed,
       sentence: passSentence ?? (sentence || null),
       wordsChanged: bestWords,
-      bigRun,
     });
   }
 
@@ -272,6 +272,7 @@ export default function RoundScreen({
               )}
               {blocked && <p className="text-xl text-coral">🙂 Let’s try different words.</p>}
               {hiccup && <p className="text-xl text-coral">😅 The spinner hiccuped. Try again!</p>}
+              {showHint && <Hint text={round.hint!} />}
               <button
                 type="submit"
                 disabled={!draft.trim() || thinking}
@@ -306,28 +307,27 @@ export default function RoundScreen({
         {(step === "ready" || step === "done") && (
           <div className="flex flex-col gap-3">
             {hiccup && <p className="text-xl text-coral">😅 The spinner hiccuped. Try again!</p>}
-            {step === "done" && anim.results && !bigMode && !scored && (
+            {step === "done" && anim.results && !scored && (
               <SandboxSummary results={anim.results} prediction={prediction} />
             )}
-            {step === "done" && !bigMode && scored && lastSet && (
+            {step === "done" && scored && lastSet && (
               <SetSummary
                 round={round}
                 set={lastSet}
                 prediction={prediction}
-                wordsChanged={round.kind === "switch" && startSentence ? wordEditDistance(startSentence, sentence) : undefined}
+                wordsChanged={
+                  round.kind === "switch" && startSentence ? wordEditDistance(startSentence, sentence) : undefined
+                }
                 outOfSpins={!passed && budgetLeft <= 0}
               />
             )}
-            {step === "done" && bigMode && bigRun && <BigRunSummary target={target} run={bigRun} />}
-
+            {step === "done" && showHint && <Hint text={round.hint!} />}
             <ActionButtons
               step={step}
-              spinLabel={`Spin ${spinsThisSet}! 🎡`}
-              onSpin={() => doSpin(false)}
+              spinLabel={`Spin ${round.spins}! 🎡`}
+              onSpin={doSpin}
               onAgain={() => setStep("predict")}
-              canSpinAgain={canSpinAgain && !bigMode}
-              bigRunOffer={bigRunReady() && !bigRun ? round.bigSpins! : null}
-              onBigRun={() => doSpin(true)}
+              canSpinAgain={canSpinAgain}
               next={showNext ? (round.kind === "sandbox" ? "I’m ready for a challenge →" : "Next →") : null}
               onNext={finish}
               passed={passed}
@@ -350,9 +350,12 @@ export default function RoundScreen({
                     }}
                   />
                 </div>
-                <button onClick={togglePeek} className="self-end text-lg text-muted underline">
-                  Hide
-                </button>
+                <div className="flex items-center justify-between">
+                  <p className="text-base text-muted">👉 These chances are the slices of the spinner.</p>
+                  <button onClick={togglePeek} className="text-lg text-muted underline">
+                    Hide
+                  </button>
+                </div>
               </div>
             ) : (
               <button
@@ -373,8 +376,11 @@ export default function RoundScreen({
           <SpinBoard
             results={anim.results}
             revealed={anim.revealed}
-            spins={spinsThisSet}
+            spins={round.spins}
             highlight={round.targets}
+            bars={view?.bars ?? null}
+            realWheel={peek}
+            goal={scored && round.kind !== "balance" ? round.min : undefined}
             preparing={step === "spinning" && !anim.results}
             onSkip={anim.skip}
           />
@@ -382,16 +388,15 @@ export default function RoundScreen({
       </section>
     </main>
   );
+}
 
-  /** Perfect 10: the 50-spin run unlocks once the round is over (passed or out of spins). */
-  function bigRunReady() {
-    return round.kind === "perfect" && !!round.bigSpins && roundOver;
-  }
+function Hint({ text }: { text: string }) {
+  return <p className="animate-pop rounded-xl bg-sky-soft px-3 py-2 text-xl">💡 {text}</p>;
 }
 
 function Tickets({ left, total }: { left: number; total: number }) {
   return (
-    <div className="flex shrink-0 items-center gap-1" aria-label={`${left} spin sets left`}>
+    <div className="flex shrink-0 items-center gap-1" aria-label={`${left} tries left`}>
       {Array.from({ length: total }, (_, i) => (
         <span key={i} className={`text-2xl ${i < left ? "" : "opacity-20 grayscale"}`}>
           🎟️
@@ -419,9 +424,10 @@ function RoundIntro({
         {round.bonus && <span className="rounded-full bg-sun px-3 py-1 font-bold">Bonus!</span>}
         <h2 className="text-5xl font-bold text-brand">{round.title}</h2>
         <p className="text-3xl leading-snug">{round.goal}</p>
-        {round.kind === "switch" && startSentence && (
+        {startSentence && (
           <p className="text-xl text-muted">
-            Start with your sentence: <b className="text-ink">“{startSentence} ___”</b>
+            {round.kind === "switch" ? "Start with your sentence:" : `Will this still win with ${round.spins} spins?`}{" "}
+            <b className="text-ink">“{startSentence} ___”</b>
           </p>
         )}
         {round.budget !== null && (
@@ -452,8 +458,6 @@ function ActionButtons(props: {
   onSpin: () => void;
   onAgain: () => void;
   canSpinAgain: boolean;
-  bigRunOffer: number | null;
-  onBigRun: () => void;
   next: string | null;
   onNext: () => void;
   passed: boolean;
@@ -467,20 +471,21 @@ function ActionButtons(props: {
       </button>
     );
   }
-  // After a set: the most useful next step is the big button.
-  const primary = props.bigRunOffer
-    ? { label: `Spin ${props.bigRunOffer}! 🎡🎡`, on: props.onBigRun }
-    : props.next && (props.passed || !props.canSpinAgain)
-      ? { label: props.next, on: props.onNext }
-      : props.canSpinAgain
-        ? { label: "Spin again 🔁", on: props.onAgain }
-        : props.next
-          ? { label: props.next, on: props.onNext }
-          : null;
-  const secondary = [
-    props.canSpinAgain && primary?.on !== props.onAgain && { label: "Spin again 🔁", on: props.onAgain },
-    props.next && primary?.on !== props.onNext && { label: props.next, on: props.onNext },
-  ].filter(Boolean) as { label: string; on: () => void }[];
+  // After a set: moving on is the big button once the round is won or out of
+  // tries; otherwise it's spinning again.
+  const nextFirst = props.next && (props.passed || !props.canSpinAgain);
+  const primary = nextFirst
+    ? { label: props.next!, on: props.onNext }
+    : props.canSpinAgain
+      ? { label: "Spin again 🔁", on: props.onAgain }
+      : null;
+  const secondary = nextFirst
+    ? props.canSpinAgain
+      ? [{ label: "Spin again 🔁", on: props.onAgain }]
+      : []
+    : props.next
+      ? [{ label: props.next, on: props.onNext }]
+      : [];
   return (
     <div className="flex flex-col gap-2">
       {primary && (
@@ -488,15 +493,11 @@ function ActionButtons(props: {
           {primary.label}
         </button>
       )}
-      {secondary.length > 0 && (
-        <div className="flex gap-2">
-          {secondary.map((b) => (
-            <button key={b.label} onClick={b.on} className={`${small} flex-1 border-line bg-card`}>
-              {b.label}
-            </button>
-          ))}
-        </div>
-      )}
+      {secondary.map((b) => (
+        <button key={b.label} onClick={b.on} className={`${small} border-line bg-card`}>
+          {b.label}
+        </button>
+      ))}
     </div>
   );
 }
@@ -518,6 +519,7 @@ function SetSummary({
   const counts = outcome.targetCounts;
   const guess = prediction && "count" in prediction ? prediction.count : undefined;
   const actual = counts[round.targets[0]];
+  const step = guessStep(round.spins);
   return (
     <div className="flex animate-pop flex-col gap-1 text-2xl">
       <p>
@@ -535,7 +537,9 @@ function SetSummary({
         {guess !== undefined && (
           <span className="text-xl text-muted">
             {" "}
-            {Math.abs(guess - actual) === 0 ? "🎯 You guessed it!" : `(You guessed ${guess}.)`}
+            {Math.abs(guess - actual) * 2 < step || guess === actual
+              ? "🎯 Great guess!"
+              : `(You guessed ${step > 1 ? "about " : ""}${guess}.)`}
           </span>
         )}
       </p>
@@ -570,24 +574,7 @@ function SetSummary({
 
 function needText(round: RoundConfig): string {
   if (round.kind === "balance") return `Need both between ${round.eachMin} and ${round.eachMax}.`;
-  if (round.kind === "perfect") return `Need all ${round.spins}.`;
   return `Need ${round.min} or more.`;
-}
-
-function BigRunSummary({ target, run }: { target: string; run: { count: number; total: number } }) {
-  const slips = run.total - run.count;
-  return (
-    <div className="flex animate-pop flex-col gap-1 text-2xl">
-      <p>
-        “{target}” came up <b>{run.count}</b> of {run.total}.
-      </p>
-      <p className="text-xl">
-        {slips === 0
-          ? "It never slipped… this time! Even very likely words can slip someday."
-          : `It slipped ${slips} ${slips === 1 ? "time" : "times"}! Even a likely word doesn’t win every spin.`}
-      </p>
-    </div>
-  );
 }
 
 function SandboxSummary({ results, prediction }: { results: SpinResult[]; prediction: Prediction | null }) {

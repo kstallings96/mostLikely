@@ -15,11 +15,11 @@ export interface Outcome {
 export function judge(round: RoundConfig, counts: Record<string, number>): Outcome {
   const targetCounts = Object.fromEntries(round.targets.map((t) => [t, counts[t] ?? 0]));
   switch (round.kind) {
+    case "tutorial":
     case "sandbox":
       return { passed: false, targetCounts };
     case "atLeast":
     case "switch":
-    case "perfect":
       return { passed: targetCounts[round.targets[0]] >= (round.min ?? round.spins), targetCounts };
     case "balance":
       return {
@@ -31,15 +31,15 @@ export function judge(round: RoundConfig, counts: Record<string, number>): Outco
 
 /**
  * Exact chance that one set of spins passes, given each target word's chance
- * on this sentence's spinner. Null for the Sandbox.
+ * on this sentence's spinner. Null for the tutorial and Sandbox.
  */
 export function passChance(round: RoundConfig, chanceOf: (word: string) => number): number | null {
   switch (round.kind) {
+    case "tutorial":
     case "sandbox":
       return null;
     case "atLeast":
     case "switch":
-    case "perfect":
       return binomialAtLeast(round.spins, round.min ?? round.spins, chanceOf(round.targets[0]));
     case "balance": {
       const [a, b] = round.targets;
@@ -56,6 +56,11 @@ export function luck(passed: boolean, chance: number | null): Luck {
   if (passed && chance < GAME.luckyThreshold) return "lucky";
   if (!passed && chance >= GAME.unluckyThreshold) return "unlucky";
   return null;
+}
+
+/** Guess buttons go up by 1 for small sets, by 5 or 10 for big ones. */
+export function guessStep(spins: number): number {
+  return spins > 20 ? spins / 10 : 1;
 }
 
 /** "about 7 times in 10", or "almost never" / "almost every time". */

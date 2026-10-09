@@ -6,7 +6,7 @@ A ~10-minute classroom activity for middle schoolers (ages 11–14) about one id
 > unlikely words sometimes, and what you type changes the spinner.
 
 Kids type the start of a sentence, guess what comes next, and spin a real
-language model (GPT-2) 10 times. Rounds are scored on **actual spins, never on
+language model (GPT-2). Rounds are scored on **actual spins, never on
 the probability bars**, so the activity targets the misconception that the AI
 always picks the single most likely word.
 
@@ -41,6 +41,32 @@ Set `NEXT_PUBLIC_MODEL_MODE` in `.env.local` (see `.env.example`):
   laptops only show the page. Use it when student laptops are too weak.
 
 Both modes run the same spinner engine (`lib/spinner/engine.ts`).
+
+## The activity
+
+| Round | Goal | Spins × tries |
+|---|---|---|
+| 🔍 **How it works** | Watch the AI's real spinner pick the next word in slow motion, for 3 ready-made sentences (sure-ish → spread out) | 10 per sentence |
+| 🎡 **Play** | Type anything, guess, spin. No score | 10, unlimited |
+| 🐶 **Dog Trainer** | "dog" at least 5 of 10 | 10 × 5 |
+| 🐱 **Switcheroo** | Starting from your Dog Trainer sentence, change as few words as possible so "cat" wins at least 5 of 10 | 10 × 5 |
+| 🚀 **Big Spin** | "dog" at least 25 of 50 | 50 × 3 |
+| 🌟 **Mega Spin** | "dog" at least 50 of 100 | 100 × 3 |
+
+Big Spin and Mega Spin keep the same goal with more spins: luck matters
+less, so only sentences where "dog" is really likely keep winning. A tip
+appears after 2 missed tries. "🍀 Lucky win!" means the kid passed although
+the sentence usually doesn't; "😮 So close!" means a sentence that usually
+passes missed this time. Coin Flip (dog and cat tie) is in the config but
+turned off.
+
+Add `?round=<id>` to the URL to jump to a round (e.g. `?round=big-spin`).
+
+**Why the goals are "at least half":** GPT-2 completes familiar phrases; it
+doesn't reason about meaning. "Every day I walk my" → dog 81%, but "The
+animal that barks is called a" → dog 1%. A 70% goal was nearly impossible
+for kids' sentences; "half" is reachable once kids think about what usually
+comes before "dog", which is the lesson.
 
 ## Config files (edit these, not the code)
 
@@ -79,8 +105,10 @@ chances), `prediction`, `spin_results`, `words_changed`, `attempt`,
 | `sentence_submitted` | **every** sentence, not just successes | `sentence`, `distribution`, `words_changed` (vs. this kid's previous sentence), `attempt` (try # in this round) |
 | `sentence_blocked` | a sentence contained a blocked word | full `sentence` text |
 | `prediction` | a guess was tapped or typed | `prediction`: word, count, typed?, its chance, its pieces |
-| `spin_set` | a set of spins finished | `spin_results`: each spin's word, raw token, chance, pieces; counts; skipped animation? |
+| `spin_set` | a set of spins finished | `spin_results`: each spin's word, raw token, chance, pieces; counts; skipped animation? `detail`: target counts, passed, exact pass chance, lucky/unlucky (tutorial sets have `detail.tutorial`) |
 | `peek` / `xray_toggle` | chance bars opened / X-ray flipped | |
+| `round_start` / `round_complete` | a round began / the kid moved on | passed, lucky, tries used, Switcheroo `words_changed` |
+| `hint_shown` | the round's tip appeared after missed tries | `detail.hint` |
 | `error` | the spinner failed | `detail`: where, message |
 
 Logging never stops the game. Events wait in a queue mirrored to
@@ -93,8 +121,10 @@ so wifi drops and reloads don't lose data.
 ## How it works
 
 1. **Next-token probabilities.** GPT-2 (base model, `Xenova/gpt2` via
-   `@huggingface/transformers`) runs on the sentence; we softmax the logits at
-   the last position ourselves. No `generate()`, temperature or top-k.
+   `@huggingface/transformers`) runs on `<|endoftext|>` + the sentence (the
+   marker tells GPT-2 a new text starts: "Once upon a" → "time" 18% without
+   it, 99% with it); we softmax the logits at the last position ourselves. No
+   `generate()`, temperature or top-k.
 2. **Merge layer** (`lib/normalize.ts`, `lib/merge.ts`). All ~50k tokens
    become kid words: strip the leading space, lowercase, drop attached
    punctuation, merge target-word plurals, sum the probabilities.
@@ -117,6 +147,10 @@ so wifi drops and reloads don't lose data.
 - **fp16, not 8-bit.** The 8-bit GPT-2 builds shift probabilities by 0.2–0.4
   (total variation); "raining cats and → dogs" drops from 59% to 39%. fp16 is
   effectively exact. Smaller files would teach the wrong numbers.
+- **One color per word.** A word has the same color as its slice on the
+  spinner, its Peek bar, and its column in the graph, and opening Peek turns
+  the small wheel into the sentence's real spinner, so chances → spinner →
+  results reads as one picture. The tutorial shows that link in slow motion.
 - **X-ray and word pieces.** "dog", "Dog" and "dogs" are separate tokens, and
   "Fido" is `␣F + ido`. X-ray shows the pieces for curious kids; the main view
   stays in kid words.
@@ -130,6 +164,6 @@ so wifi drops and reloads don't lose data.
 
 ## Status
 
-Prototype on branch `prototype`. Done: model + merge layer, sandbox, server
-and browser modes, local-file logging + `/researcher`. Next: rounds (Dog
-Trainer, Switcheroo, Perfect 10, Coin Flip), then Supabase logging.
+Prototype on branch `prototype`. Done: model + merge layer, tutorial,
+sandbox, rounds and scoring, server and browser modes, local-file logging +
+`/researcher`. Next: Supabase logging.

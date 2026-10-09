@@ -18,6 +18,7 @@ export type EventType =
   | "xray_toggle"
   | "round_start"
   | "round_complete"
+  | "hint_shown"
   | "error"
   | "session_end";
 
